@@ -12,7 +12,7 @@
   var L = window.IHRLX.latex2ooxml;
   var O = window.IHRLX.ooxml2latex;
   var BM = '_LtxEdit';
-  var VERSION = '1.2.0';
+  var VERSION = window.IHRLX_VERSION || 'dev';
 
   var S = {
     images: {},
@@ -324,7 +324,8 @@
     finally { setBusy(false); }
   }
 
-  // lê a seleção atual (parágrafos inteiros) e vincula
+  // lê a seleção atual (parágrafos inteiros) e vincula.
+  // Quebras de seção nunca entram no trecho: apagá-las mudaria cabeçalhos, rodapés e a capa.
   async function readSelection(fromAuto) {
     if (needWord()) return;
     setBusy(true);
@@ -334,22 +335,40 @@
         var sel = ctx.document.getSelection();
         var paras = sel.paragraphs; paras.load('items');
         await ctx.sync();
-        if (!paras.items.length) { status('Selecione um ou mais parágrafos no documento.', 'warn'); return; }
-        var range = paras.getFirst().getRange('Whole').expandTo(paras.getLast().getRange('Whole'));
+        var n = paras.items.length;
+        if (!n) { status('Selecione um ou mais parágrafos no documento.', 'warn'); return; }
+        var range = paras.items[0].getRange('Whole').expandTo(paras.items[n - 1].getRange('Whole'));
+        var r = await readRange(ctx, range);
+        var nParas = n, trimmed = false;
+        if (r.sectBreaks && r.sectBreaks.length) {
+          if (r.paraCount !== n) {
+            S.bound = false; setEditor(r.latex);
+            notice('O trecho selecionado cruza uma quebra de seção e não pode ser vinculado. Selecione só a parte antes ou depois da quebra.');
+            status(''); renderMode();
+            return;
+          }
+          var k = r.sectBreaks[0], a, b;
+          if (k > 0) { a = 0; b = k - 1; } else { a = 1; b = (r.sectBreaks.length > 1 ? r.sectBreaks[1] : n) - 1; }
+          if (b < a) { status('A seleção contém só uma quebra de seção, que não é editável pelo painel.', 'warn'); return; }
+          range = paras.items[a].getRange('Whole').expandTo(paras.items[b].getRange('Whole'));
+          r = await readRange(ctx, range);
+          nParas = b - a + 1; trimmed = true;
+        }
         if (!api('1.4')) {
-          var r0 = await readRange(ctx, range);
-          setEditor(r0.latex);
+          setEditor(r.latex);
           status('Esta versão do Word não permite vincular o trecho: use "Inserir no cursor" com o trecho selecionado.', 'warn');
           return;
         }
         range.insertBookmark(BM);
+        if (trimmed) { range.select(); S.suppressUntil = Date.now() + 1500; }
         await ctx.sync();
-        var r = await readRange(ctx, range);
-        S.bound = true; S.paras = paras.items.length; S.base = r.latex; S.clean = r.latex; S.unsafe = r.unsafe;
-        Object.keys(r.images).forEach(function (k) { S.images[k] = r.images[k]; }); renderImages();
+        S.bound = true; S.paras = nParas; S.base = r.latex; S.clean = r.latex; S.unsafe = r.unsafe;
+        Object.keys(r.images).forEach(function (k2) { S.images[k2] = r.images[k2]; }); renderImages();
         setEditor(r.latex);
         notice(r.unsafe.length ? 'Atenção: o trecho contém ' + r.unsafe.join(', ') + ', que não têm equivalente em LaTeX e serão perdidos se você atualizar.' : '');
-        status(r.warnings.length ? 'Trecho lido, com avisos:' : 'Trecho lido e vinculado.', r.warnings.length ? 'warn' : 'ok', r.warnings);
+        var w = r.warnings.slice();
+        if (trimmed) w.unshift('O trecho foi limitado até a quebra de seção (ela fica intacta no documento).');
+        status(w.length ? 'Trecho lido e vinculado:' : 'Trecho lido e vinculado.', w.length ? 'warn' : 'ok', w);
       });
     } catch (e) {
       status('Não foi possível ler a seleção: ' + errMsg(e), 'err');
