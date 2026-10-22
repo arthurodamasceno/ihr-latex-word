@@ -4,9 +4,10 @@ Painel lateral para o Word desktop (Windows) e o Word Online. Você escreve em L
 
 ## O que faz
 
-- **Inserir no cursor**: converte o LaTeX do editor e insere no ponto do cursor (atalho `Ctrl+Enter`).
-- **Ler seleção**: converte em LaTeX os parágrafos selecionados no documento.
-- **Aplicar no trecho lido**: substitui o trecho lido pela versão editada.
+- **Leitura automática**: ao selecionar um trecho no Word, ele aparece em LaTeX no painel e fica *vinculado*.
+- **Ctrl+Enter**: insere no cursor (modo inserção) ou atualiza o trecho vinculado. Depois de inserir ou atualizar, o trecho continua vinculado e selecionado, então editar de novo não duplica o conteúdo.
+- **Proteções**: a leitura automática não sobrescreve edições ainda não aplicadas no painel, e o painel avisa se o trecho foi alterado no Word (por você ou por um colega) depois da leitura.
+- Clicar num ponto fora do trecho, sem edições pendentes, desvincula e limpa o editor para um conteúdo novo.
 
 | LaTeX | Word |
 |---|---|

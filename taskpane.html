@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>LaTeX IHR</title>
-  <link rel="stylesheet" href="taskpane.css?v=1.0.0">
+  <link rel="stylesheet" href="taskpane.css?v=1.1.0">
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
   <script src="vendor/katex.min.js?v=0.16.47"></script>
-  <script src="lib/xml.js?v=1.0.0"></script>
-  <script src="lib/math.js?v=1.0.0"></script>
-  <script src="lib/template-parts.js?v=1.0.0"></script>
-  <script src="lib/latex2ooxml.js?v=1.0.0"></script>
-  <script src="lib/ooxml2latex.js?v=1.0.0"></script>
+  <script src="lib/xml.js?v=1.1.0"></script>
+  <script src="lib/math.js?v=1.1.0"></script>
+  <script src="lib/template-parts.js?v=1.1.0"></script>
+  <script src="lib/latex2ooxml.js?v=1.1.0"></script>
+  <script src="lib/ooxml2latex.js?v=1.1.0"></script>
 </head>
 <body>
   <header>
@@ -31,12 +31,17 @@
 
   <textarea id="editor" spellcheck="false" placeholder="Escreva em LaTeX. Ex.:&#10;&#10;\section{Resultados}&#10;Texto com $E = mc^2$ e referência à Figura~\ref{fig:x}.&#10;&#10;Ctrl+Enter insere no cursor."></textarea>
 
-  <div class="actions">
-    <button id="btnInsert" class="primary" title="Converte o LaTeX e insere no ponto do cursor (Ctrl+Enter)">Inserir no cursor</button>
-    <button id="btnRead" title="Converte os parágrafos selecionados no Word em LaTeX">Ler seleção</button>
-    <button id="btnApply" disabled title="Substitui o trecho lido pelo LaTeX do editor">Aplicar no trecho lido</button>
+  <div id="modeBar" class="modebar insert">
+    <span class="dot"></span><span id="modeText">Modo inserção</span>
+    <button id="btnUnbind" class="link hidden" title="Desliga o painel do trecho">desvincular</button>
   </div>
-  <div id="readInfo" class="readinfo hidden"></div>
+
+  <div class="actions">
+    <button id="btnPrimary" class="primary">Inserir no cursor</button>
+    <button id="btnRead" title="Converte os parágrafos selecionados no Word em LaTeX e vincula o trecho">Ler seleção</button>
+  </div>
+  <label class="toggle"><input id="autoRead" type="checkbox" checked> Ler a seleção automaticamente</label>
+  <div id="notice" class="notice hidden"></div>
 
   <div id="status" class="status"></div>
 
@@ -58,11 +63,11 @@
       <li><code>\ref</code>, <code>\eqref</code>, <code>\pageref</code> → referências cruzadas do Word</li>
       <li><code>\footnote</code>, <code>\url</code>, <code>\href</code>, <code>\newpage</code>, <code>\tableofcontents</code></li>
     </ul>
-    <p class="hint">Dica: para editar um trecho existente, selecione parágrafos inteiros, clique em <b>Ler seleção</b>, edite e clique em <b>Aplicar no trecho lido</b>. Evite selecionar a capa ou quebras de seção.</p>
+    <p class="hint">Como funciona: selecione um trecho no Word e ele aparece aqui, vinculado. Edite e use <b>Ctrl+Enter</b> para atualizar o trecho. Para escrever algo novo, clique num parágrafo vazio do documento (modo inserção). Evite selecionar a capa ou quebras de seção.</p>
   </details>
 
   <footer><span id="ver">v1.0.0</span> · estilos do template IHR v3</footer>
 
-  <script src="taskpane.js?v=1.0.0"></script>
+  <script src="taskpane.js?v=1.1.0"></script>
 </body>
 </html>

@@ -67,3 +67,14 @@ code { font-family: Consolas, "Courier New", monospace; font-size: 11.5px; }
 #imgList .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: Consolas, monospace; }
 #imgList button { padding: 0 6px; line-height: 18px; }
 footer { color: var(--suave); font-size: 11px; text-align: right; }
+
+.modebar { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 8px; border-radius: 4px; background: var(--campo); border: 1px solid var(--borda); }
+.modebar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--suave); flex: none; }
+.modebar.bound .dot { background: var(--azul2); }
+.modebar.bound { border-color: var(--azul2); }
+.modebar span#modeText { flex: 1; }
+button.link { border: none; background: none; color: var(--azul2); padding: 0; text-decoration: underline; font-size: 12px; }
+.toggle { font-size: 12px; color: var(--suave); display: flex; align-items: center; gap: 6px; }
+.notice { font-size: 12px; padding: 8px; border-radius: 4px; border: 1px solid var(--aviso); color: var(--texto); display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.notice label { color: var(--aviso); }
+button.small { padding: 3px 8px; font-size: 12px; }
