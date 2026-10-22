@@ -13,7 +13,7 @@ reg add "HKCU\Software\Microsoft\Office\16.0\WEF\TrustedCatalogs\{5e63d59a-2fb9-
 reg add "HKCU\Software\Microsoft\Office\16.0\WEF\TrustedCatalogs\{5e63d59a-2fb9-41c3-8b5e-79456743365e}" /v Flags /t REG_DWORD /d 1 /f >nul || goto erro
 echo Pronto! Agora:
 echo   1. Feche e abra o Word de novo.
-echo   2. Página Inicial ^> Suplementos ^> Mais Suplementos
+echo   2. Página Inicial ^> Suplementos ^> Avançado
 echo      (ou Inserir ^> Meus Suplementos)
 echo   3. Aba PASTA COMPARTILHADA ^> LaTeX IHR ^> Adicionar.
 echo   4. O botão "Editor LaTeX" aparece na guia Página Inicial.
