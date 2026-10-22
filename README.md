@@ -1,6 +1,6 @@
 # LaTeX IHR — suplemento do Word
 
-Painel lateral para o Word desktop (Windows) e o Word Online. Você escreve em LaTeX e o conteúdo entra no documento aberto já com os estilos do template de relatório do IHR (*2025-09-18 - Template Relatório v3*). Como as edições passam pelo próprio Word, o documento continua sendo um `.docx` comum, editável em coautoria por quem não usa o suplemento.
+Painel lateral para o Word desktop (Windows) e o Word Online. Você escreve em LaTeX e o conteúdo entra no documento aberto já com os estilos do template de relatório do IHR (*Template Relatório v4*; documentos da v3 também funcionam). Como as edições passam pelo próprio Word, o documento continua sendo um `.docx` comum, editável em coautoria por quem não usa o suplemento.
 
 ## O que faz
 
@@ -18,6 +18,7 @@ Painel lateral para o Word desktop (Windows) e o Word Online. Você escreve em L
 | `tabular` (com `\multicolumn`), `itemize`, `enumerate`, `description` | tabelas e listas |
 | `\ref`, `\eqref`, `\pageref` | referências cruzadas do Word (indicadores ocultos `_RefS_`, `_RefN_` e `_RefE_`) |
 | `\footnote`, `\url`, `\href`, `\newpage`, `\tableofcontents` | nota de rodapé, hiperlink, quebra de página, sumário |
+| `\title`, `\subtitulo`, `\local`, `\date`, `\maketitle` | textos da capa (estilos *Capa - …* da v4) |
 
 As imagens de `\includegraphics{nome}` precisam ser carregadas no painel, na seção *Imagens*. As imagens lidas do documento entram nessa lista automaticamente.
 

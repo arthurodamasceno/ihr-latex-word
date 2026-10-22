@@ -12,7 +12,7 @@
   var L = window.IHRLX.latex2ooxml;
   var O = window.IHRLX.ooxml2latex;
   var BM = '_LtxEdit';
-  var VERSION = '1.1.1';
+  var VERSION = '1.2.0';
 
   var S = {
     images: {},
