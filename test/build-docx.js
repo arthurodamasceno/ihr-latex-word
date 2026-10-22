@@ -3,11 +3,12 @@ global.katex = require('../vendor/katex.min.js');
 const fs = require('fs');
 const JSZip = require('/opt/npm-tools/node_modules/jszip');
 const L = require('../lib/latex2ooxml.js');
+const B = require('../lib/bib.js');
 (async () => {
-  const [,, texPath, outPath, tplPath] = process.argv;
+  const [,, texPath, outPath, tplPath, bibPath] = process.argv;
   const src = fs.readFileSync(texPath, 'utf8').replace(/\\tableofcontents/, '');
   const png = fs.readFileSync('/home/claude/ihr-latex/figura-exemplo.png');
-  const res = L.convert(src, { images: { 'figura-exemplo': { base64: png.toString('base64'), contentType: 'image/png', width: 520, height: 275 } } });
+  const res = L.convert(src, { bib: bibPath ? new B.Library(fs.readFileSync(bibPath, 'utf8')) : null, images: { 'figura-exemplo': { base64: png.toString('base64'), contentType: 'image/png', width: 520, height: 275 } } });
   if (res.warnings.length) console.log('avisos:', res.warnings);
   const zip = await JSZip.loadAsync(fs.readFileSync(tplPath));
   let doc = await zip.file('word/document.xml').async('string');

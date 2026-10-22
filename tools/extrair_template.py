@@ -13,7 +13,7 @@ def style(sid):
 need = ['Normal', 'Ttulo1', 'Ttulo2', 'Ttulo3', 'Ttulo4', 'Ttulo5', 'Ttulo6', 'Fontepargpadro', 'Tabelanormal', 'Semlista',
         'Hyperlink', 'PargrafodaLista', 'Legenda', 'Tabelacomgrade', 'SimplesTabela3', 'Textodenotaderodap', 'Refdenotaderodap',
         'Fonte', 'Imagem', 'Equaes', 'Tabelas', 'Quadro', 'Sumrio1', 'Sumrio2', 'Sumrio3', 'Sumrio4', 'Sumrio5', 'Sumrio6', 'Referncias',
-        'CapaTtulo', 'CapaSubttulo', 'CapaLocaleData', 'CabealhodoSumrio']
+        'CapaTtulo', 'CapaSubttulo', 'CapaLocaleData', 'CabealhodoSumrio', 'Bibliografia']
 out = []
 for sid in need:
     s = style(sid)

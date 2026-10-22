@@ -49,6 +49,16 @@ cover = (P('CapaTtulo', 'PROJETO Xxxxx: Xxxxxxxxxxxxxxxxxxxxx') +
 sumario = '<w:p><w:pPr><w:pStyle w:val="CabealhodoSumrio"/></w:pPr><w:r><w:t>SUMÁRIO</w:t></w:r></w:p>'
 doc = doc[:body_start] + cover + sumario + doc[paras[i_sum][1]:]
 
+# página de referências no fim (antes da última quebra de seção do corpo)
+def R(parts):
+    return '<w:p><w:pPr><w:pStyle w:val="Bibliografia"/></w:pPr>' + ''.join(
+        '<w:r>%s<w:t xml:space="preserve">%s</w:t></w:r>' % ('<w:rPr><w:b/><w:bCs/></w:rPr>' if b else '', t) for t, b in parts) + '</w:p>'
+refs = ('<w:p><w:pPr><w:pStyle w:val="Ttulo1"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="0"/></w:numPr></w:pPr><w:r><w:t>Referências</w:t></w:r></w:p>' +
+        R([('ASSOCIAÇÃO BRASILEIRA DE NORMAS TÉCNICAS. ', 0), ('NBR 6023', 1), (': informação e documentação: referências: elaboração. Rio de Janeiro: ABNT, 2018.', 0)]) +
+        R([('ASSOCIAÇÃO BRASILEIRA DE NORMAS TÉCNICAS. ', 0), ('NBR 10520', 1), (': informação e documentação: citações em documentos: apresentação. Rio de Janeiro: ABNT, 2023.', 0)]))
+last = doc.rfind('<w:sectPr')
+doc = doc[:last] + refs + doc[last:]
+
 # seção 1: cabeçalho/rodapé de primeira página
 first_sect = re.search(r'<w:sectPr [^>]*>', doc[body_start:])
 k = body_start + first_sect.end()
@@ -102,6 +112,9 @@ toc_head = ('<w:style w:type="paragraph" w:styleId="CabealhodoSumrio"><w:name w:
  '<w:pPr><w:pageBreakBefore/><w:spacing w:line="480" w:lineRule="auto"/><w:ind w:firstLine="0"/><w:jc w:val="center"/><w:outlineLvl w:val="9"/></w:pPr>'
  '<w:rPr><w:b/><w:bCs/><w:caps/></w:rPr></w:style>')
 sty = re.sub(r'<w:style [^>]*w:styleId="CabealhodoSumrio".*?</w:style>', toc_head, sty, flags=re.S)
+bib_style = ('<w:style w:type="paragraph" w:styleId="Bibliografia"><w:name w:val="Bibliography"/><w:basedOn w:val="Normal"/><w:next w:val="Bibliografia"/><w:uiPriority w:val="37"/><w:unhideWhenUsed/><w:qFormat/>'
+ '<w:pPr><w:spacing w:after="240" w:line="240" w:lineRule="auto"/><w:ind w:firstLine="0"/><w:jc w:val="left"/></w:pPr></w:style>')
+sty = re.sub(r'<w:style [^>]*w:styleId="Bibliografia".*?</w:style>', bib_style, sty, flags=re.S)
 sty = sty.replace('</w:styles>', new + '</w:styles>')
 files['word/styles.xml'] = sty.encode('utf8')
 

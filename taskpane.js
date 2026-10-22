@@ -10,12 +10,14 @@
 (function () {
   'use strict';
   var L = window.IHRLX.latex2ooxml;
+  var BIB = window.IHRLX.bib;
   var O = window.IHRLX.ooxml2latex;
   var BM = '_LtxEdit';
   var VERSION = window.IHRLX_VERSION || 'dev';
 
   var S = {
     images: {},
+    lib: null,
     bound: false,        // há um trecho vinculado
     paras: 0,
     clean: '',           // texto do editor que corresponde ao trecho (sem edições pendentes)
@@ -241,9 +243,107 @@
     notice('');
     renderMode();
   }
-  function convertEditor(kinds) {
-    var res = L.convert(ed.value, { images: S.images, labelKinds: kinds });
+  function convertEditor(kinds, cited) {
+    var res = L.convert(ed.value, { images: S.images, labelKinds: kinds, bib: S.lib, citedKeys: cited || [] });
     return { res: res, pkg: L.buildPackage(res) };
+  }
+
+  // ------------------------------------------------------- referências
+  var BIBNS = 'urn:ihr-latex-word:bib';
+  function oc(fn) { return new Promise(function (ok) { fn(function (r) { ok(r); }); }); }
+  async function loadLibrary() {
+    S.lib = new BIB.Library('');
+    try {
+      var r = await oc(function (cb) { Office.context.document.customXmlParts.getByNamespaceAsync(BIBNS, cb); });
+      if (r.status === 'succeeded' && r.value.length) {
+        var x = await oc(function (cb) { r.value[0].getXmlAsync(cb); });
+        if (x.status === 'succeeded') S.lib = new BIB.Library(window.IHRLX.xml.text(window.IHRLX.xml.parse(x.value)));
+      }
+    } catch (e) { /* sem partes XML: biblioteca vazia */ }
+    renderBib();
+  }
+  async function saveLibrary() {
+    var xml = '<ihrbib xmlns="' + BIBNS + '">' + window.IHRLX.xml.esc(S.lib.serialize()) + '</ihrbib>';
+    var r = await oc(function (cb) { Office.context.document.customXmlParts.getByNamespaceAsync(BIBNS, cb); });
+    if (r.status === 'succeeded') for (var i = 0; i < r.value.length; i++) await oc(function (cb) { r.value[i].deleteAsync(cb); });
+    var a = await oc(function (cb) { Office.context.document.customXmlParts.addAsync(xml, cb); });
+    if (a.status !== 'succeeded') throw new Error('não foi possível guardar o .bib no documento');
+  }
+  function renderBib() {
+    var n = S.lib ? S.lib.count() : 0;
+    $('bibCount').textContent = n;
+    var q = BIB.sortKey($('bibFilter').value || '');
+    var ul = $('bibList'); ul.innerHTML = '';
+    if (!n) return;
+    var keys = S.lib.order.filter(function (k) { return !q || BIB.sortKey(k + ' ' + S.lib.label(k)).indexOf(q) >= 0; }).slice(0, 60);
+    keys.forEach(function (k) {
+      var li = document.createElement('li');
+      li.innerHTML = '<code></code><span></span>';
+      li.firstChild.textContent = k; li.lastChild.textContent = S.lib.label(k);
+      li.title = 'Clique para inserir \\cite{' + k + '} no editor';
+      li.onclick = function () {
+        ed.setRangeText('\\cite{' + k + '}', ed.selectionStart, ed.selectionEnd, 'end');
+        ed.focus(); ed.dispatchEvent(new Event('input'));
+      };
+      ul.appendChild(li);
+    });
+  }
+  async function citedKeys(ctx) {
+    var keys = [], seen = {};
+    if (!api('1.5')) return keys;
+    try {
+      var fields = ctx.document.body.fields; fields.load('items/code');
+      await ctx.sync();
+      fields.items.forEach(function (f) {
+        var m = /^\s*ADDIN\s+IHRCITE\s+(\{.*\})\s*$/i.exec(f.code || '');
+        if (!m) return;
+        try { JSON.parse(m[1]).k.forEach(function (k) { if (!seen[k]) { seen[k] = 1; keys.push(k); } }); } catch (e) { /* ignora */ }
+      });
+    } catch (e) { /* sem campos */ }
+    return keys;
+  }
+  // Regenera a lista REFERÊNCIAS: entradas do .bib citadas no documento + entradas manuais (de quem não usa o
+  // suplemento), em ordem alfabética. Entradas manuais nunca são apagadas.
+  async function regenBib(ctx, createIfMissing) {
+    if (!S.lib || !S.lib.count()) return 'Nenhum .bib carregado.';
+    var keys = (await citedKeys(ctx)).filter(function (k) { return S.lib.has(k); });
+    var paras = ctx.document.body.paragraphs; paras.load('items/text,styleBuiltIn');
+    await ctx.sync();
+    var items = paras.items, h = -1;
+    for (var i = items.length - 1; i >= 0; i--) {
+      if (items[i].styleBuiltIn === 'Heading1' && /^REFER[EÊ]NCIAS$/i.test((items[i].text || '').trim())) { h = i; break; }
+    }
+    if (h < 0) {
+      if (!createIfMissing || !keys.length) return keys.length ? 'Não encontrei o capítulo "Referências" no documento.' : 'Nenhuma citação do .bib no documento.';
+      var res0 = L.convertBibList({ bib: S.lib, keys: keys, manual: [], withHeading: true });
+      ctx.document.body.insertOoxml(L.buildPackage(res0), 'End');
+      await ctx.sync();
+      return 'Capítulo "Referências" criado no fim do documento com ' + keys.length + ' referência(s).';
+    }
+    var list = [];
+    for (var j = h + 1; j < items.length && items[j].styleBuiltIn === 'Bibliography'; j++) list.push(items[j]);
+    var manual = [];
+    if (list.length) {
+      var bms = list.map(function (p) { return p.getRange('Whole').getBookmarks(true, true); });
+      await ctx.sync();
+      var oxs = [];
+      list.forEach(function (p, k) {
+        var managed = bms[k].value.some(function (n) { return /^_RefB_/.test(n); });
+        if (!managed && (p.text || '').trim()) oxs.push(p.getRange('Whole').getOoxml());
+      });
+      if (oxs.length) await ctx.sync();
+      oxs.forEach(function (ox) {
+        var t = O.convert(ox.value).latex.trim();
+        var m = /^\\refmanual\{([\s\S]*)\}$/.exec(t);
+        manual.push(m ? m[1] : t);
+      });
+    }
+    var res = L.convertBibList({ bib: S.lib, keys: keys, manual: manual });
+    var pkg = L.buildPackage(res);
+    if (list.length) list[0].getRange('Whole').expandTo(list[list.length - 1].getRange('Whole')).insertOoxml(pkg, 'Replace');
+    else if (res.body) items[h].insertParagraph('', 'After').insertOoxml(pkg, 'Replace');
+    await ctx.sync();
+    return 'Referências atualizadas: ' + keys.length + ' do .bib e ' + manual.length + ' manual(is).';
   }
   function finish(res, okMsg, fieldsOk) {
     var w = res.warnings.slice();
@@ -261,13 +361,14 @@
     try {
       await Word.run(async function (ctx) {
         var kinds = await labelKinds(ctx);
-        var c = convertEditor(kinds);
+        var c = convertEditor(kinds, await citedKeys(ctx));
         var rng = ctx.document.getSelection().insertOoxml(c.pkg, 'Replace');
         await ctx.sync();
         var ok = c.res.fields ? await updateFields(ctx, c.res) : true;
+        var bibMsg = c.res.cites && !c.res.hasBib && S.lib && S.lib.count() ? await regenBib(ctx, true) : '';
         if (api('1.4')) await bindTo(ctx, rng, ed.value);
         notice(''); renderMode();
-        finish(c.res, S.bound ? 'Inserido. O trecho continua vinculado: Ctrl+Enter atualiza ele.' : 'Inserido no documento.', ok);
+        finish(c.res, (S.bound ? 'Inserido. O trecho continua vinculado: Ctrl+Enter atualiza ele.' : 'Inserido no documento.') + (bibMsg ? ' ' + bibMsg : ''), ok);
       });
     } catch (e) {
       status('Não foi possível inserir: ' + errMsg(e), 'err');
@@ -298,7 +399,7 @@
           return;
         }
         var kinds = await labelKinds(ctx);
-        var c = convertEditor(kinds);
+        var c = convertEditor(kinds, await citedKeys(ctx));
         if (c.res.missingImages.length && !force) {
           notice('Faltam no painel as imagens ' + c.res.missingImages.join(', ') + '. Atualizar agora trocaria essas imagens do documento por marcadores de texto. Carregue-as em "Imagens" ou confirme.', [
             { label: 'Atualizar mesmo assim', run: function () { notice(''); updateBound(true); } }
@@ -309,9 +410,10 @@
         var rng = b.insertOoxml(c.pkg, 'Replace');
         await ctx.sync();
         var ok = c.res.fields ? await updateFields(ctx, c.res) : true;
+        var bibMsg = c.res.cites && !c.res.hasBib && S.lib && S.lib.count() ? await regenBib(ctx, true) : '';
         await bindTo(ctx, rng, ed.value);
         notice(''); renderMode();
-        finish(c.res, 'Trecho atualizado. Ele continua vinculado ao painel.', ok);
+        finish(c.res, 'Trecho atualizado. Ele continua vinculado ao painel.' + (bibMsg ? ' ' + bibMsg : ''), ok);
       });
     } catch (e) {
       status('Não foi possível atualizar: ' + errMsg(e), 'err');
@@ -512,6 +614,30 @@
   }
 
   // ------------------------------------------------------- botões
+  $('bibInput').addEventListener('change', function (ev) {
+    var f = (ev.target.files || [])[0]; ev.target.value = '';
+    if (!f) return;
+    var rd = new FileReader();
+    rd.onload = async function () {
+      if (!S.lib) S.lib = new BIB.Library('');
+      var m = S.lib.merge(String(rd.result));
+      renderBib();
+      try {
+        if (typeof Office !== 'undefined' && Office.context && Office.context.document) await saveLibrary();
+        status('.bib carregado: ' + m.added + ' nova(s), ' + m.updated + ' atualizada(s). As referências ficam guardadas dentro deste documento.', 'ok');
+      } catch (e) { status('.bib carregado no painel, mas não consegui guardá-lo no documento: ' + errMsg(e), 'warn'); }
+    };
+    rd.readAsText(f, 'utf-8');
+  });
+  $('bibFilter').addEventListener('input', renderBib);
+  $('btnBibUpdate').addEventListener('click', async function () {
+    if (needWord()) return;
+    setBusy(true); status('Atualizando referências…');
+    try { await Word.run(async function (ctx) { status(await regenBib(ctx, true), 'ok'); }); }
+    catch (e) { status('Não foi possível atualizar as referências: ' + errMsg(e), 'err'); }
+    finally { setBusy(false); }
+  });
+
   $('btnPrimary').addEventListener('click', primary);
   $('btnRead').addEventListener('click', function (ev) { readSelection(false, ev.shiftKey); });
   $('btnUnbind').addEventListener('click', function () { unbind(!dirty()); status('Trecho desvinculado.', ''); });
@@ -524,6 +650,7 @@
         try {
           Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, scheduleSelCheck);
         } catch (e) { /* sem eventos: segue manual */ }
+        loadLibrary();
         // remove um vínculo esquecido de uma sessão anterior
         Word.run(async function (ctx) { ctx.document.deleteBookmark(BM); await ctx.sync(); }).catch(function () {});
       }

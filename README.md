@@ -19,6 +19,17 @@ Painel lateral para o Word desktop (Windows) e o Word Online. Você escreve em L
 | `\ref`, `\eqref`, `\pageref` | referências cruzadas do Word (indicadores ocultos `_RefS_`, `_RefN_` e `_RefE_`) |
 | `\footnote`, `\url`, `\href`, `\newpage`, `\tableofcontents` | nota de rodapé, hiperlink, quebra de página, sumário |
 | `\title`, `\subtitulo`, `\local`, `\date`, `\maketitle` | textos da capa (estilos *Capa - …* da v4) |
+| `\cite`, `\textcite`/`\citeonline`, `\citeauthor`, `\citeyear` | citação ABNT autor-data, num campo `ADDIN IHRCITE` (como fazem Zotero e Mendeley) |
+| `\printbibliography`, `\refmanual{…}` | capítulo Referências no estilo *Bibliografia*; entrada manual |
+
+## Referências
+
+- O `.bib` carregado no painel fica guardado **dentro do .docx**, numa parte XML personalizada (`urn:ihr-latex-word:bib`), e vai junto com o arquivo.
+- Cada citação é um campo que guarda as chaves e mostra o texto "(SILVA, 2020)". Quem não usa o suplemento vê texto comum.
+- A lista fica no capítulo "Referências" (Título 1 sem número), com parágrafos no estilo nativo *Bibliografia*:
+  - entradas geradas do `.bib` levam um indicador oculto `_RefB_<chave>`;
+  - entradas digitadas à mão (por exemplo, por colegas sem o suplemento) não têm indicador. Elas nunca são apagadas, só reordenadas em ordem alfabética junto com as demais.
+- **Atualizar lista no documento** (ou qualquer inserção com `\cite`) refaz a lista: entram todas as chaves citadas no documento, mais as entradas manuais.
 
 As imagens de `\includegraphics{nome}` precisam ser carregadas no painel, na seção *Imagens*. As imagens lidas do documento entram nessa lista automaticamente.
 
