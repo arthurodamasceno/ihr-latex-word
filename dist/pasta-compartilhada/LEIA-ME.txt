@@ -10,10 +10,17 @@ INSTALAR (uma vez, estando na rede da empresa ou na VPN)
  4. Aba PASTA COMPARTILHADA > LaTeX IHR > Adicionar.
  5. Pronto: botão "Editor LaTeX" na guia Página Inicial.
 
+MODELOS DE DOCUMENTO
+ - O instalar.bat também copia os modelos da pasta "Modelos" para o Word.
+   Para criar um documento: Arquivo > Novo > Pessoal > escolha o modelo.
+ - Quando um modelo novo for adicionado à pasta, rode "atualizar-modelos.bat".
+ - Cada modelo traz o próprio perfil: o rodapé do painel mostra qual está em uso
+   (ex.: "perfil: TCC Eng. Mecânica UFRGS"), e o LaTeX passa a sair no padrão dele.
+
 USAR
  - Funciona no Word para Windows e precisa de internet (o painel é carregado da web).
    Nenhum texto do documento sai do seu computador: a conversão roda no próprio painel.
- - Crie o documento a partir do "Template Relatório v4".
+ - Crie o documento a partir de um dos modelos (Arquivo > Novo > Pessoal).
  - Selecione um trecho (ou clique numa seção em "Estrutura do documento"): ele vira LaTeX
    no painel. Edite e clique em "Atualizar trecho" (Ctrl+Enter). Só o que mudou é reescrito.
  - Com o cursor num ponto vazio, o que você escrever é inserido ali.

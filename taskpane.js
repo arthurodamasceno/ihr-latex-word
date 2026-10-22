@@ -245,8 +245,36 @@
     renderMode();
   }
   function convertEditor(kinds, cited) {
-    var res = L.convert(ed.value, { images: S.images, labelKinds: kinds, bib: S.lib, citedKeys: cited || [] });
+    var res = L.convert(ed.value, convOpts({ images: S.images, labelKinds: kinds, bib: S.lib, citedKeys: cited || [] }));
     return { res: res, pkg: L.buildPackage(res) };
+  }
+
+  // ------------------------------------------------------- perfil do template
+  // Um .dotx pode trazer um perfil (parte XML personalizada) que ajusta a conversão ao template.
+  var PERFNS = 'urn:ihr-latex-word:perfil';
+  var PERFIL_IHR = { nome: 'template IHR v4', legenda: ' - ', equacaoPorCapitulo: false,
+    referencias: { iniciais: false, destaque: 'negrito' }, capaComQuadros: true };
+  S.profile = PERFIL_IHR;
+  async function loadProfile() {
+    S.profile = PERFIL_IHR;
+    try {
+      var r = await oc(function (cb) { Office.context.document.customXmlParts.getByNamespaceAsync(PERFNS, cb); });
+      if (r.status === 'succeeded' && r.value.length) {
+        var x = await oc(function (cb) { r.value[0].getXmlAsync(cb); });
+        if (x.status === 'succeeded') {
+          var j = JSON.parse(window.IHRLX.xml.text(window.IHRLX.xml.parse(x.value)));
+          S.profile = Object.assign({}, PERFIL_IHR, j, { referencias: Object.assign({}, PERFIL_IHR.referencias, j.referencias || {}) });
+        }
+      }
+    } catch (e) { /* sem perfil: IHR */ }
+    $('perfil').textContent = 'perfil: ' + S.profile.nome;
+    $('perfil').title = S.profile === PERFIL_IHR ? 'Documento sem perfil próprio: usa o padrão do template IHR.' : 'Perfil lido do template deste documento.';
+  }
+  function convOpts(extra) {
+    var P = S.profile;
+    if (S.lib) S.lib.setStyle({ initials: !!P.referencias.iniciais });
+    return Object.assign({ captionSep: P.legenda, eqChapter: !!P.equacaoPorCapitulo,
+      bibEmph: P.referencias.destaque === 'italico' ? 'i' : 'b', coverFrames: P.capaComQuadros !== false }, extra);
   }
 
   // ------------------------------------------------------- referências
@@ -316,7 +344,7 @@
     }
     if (h < 0) {
       if (!createIfMissing || !keys.length) return keys.length ? 'Não encontrei o capítulo "Referências" no documento.' : 'Nenhuma citação do .bib no documento.';
-      var res0 = L.convertBibList({ bib: S.lib, keys: keys, manual: [], withHeading: true });
+      var res0 = L.convertBibList(convOpts({ bib: S.lib, keys: keys, manual: [], withHeading: true }));
       ctx.document.body.insertOoxml(L.buildPackage(res0), 'End');
       await ctx.sync();
       return 'Capítulo "Referências" criado no fim do documento com ' + keys.length + ' referência(s).';
@@ -339,7 +367,7 @@
         manual.push(m ? m[1] : t);
       });
     }
-    var res = L.convertBibList({ bib: S.lib, keys: keys, manual: manual });
+    var res = L.convertBibList(convOpts({ bib: S.lib, keys: keys, manual: manual }));
     var pkg = L.buildPackage(res);
     if (list.length) list[0].getRange('Whole').expandTo(list[list.length - 1].getRange('Whole')).insertOoxml(pkg, 'Replace');
     else if (res.body) items[h].insertParagraph('', 'After').insertOoxml(pkg, 'Replace');
@@ -446,7 +474,7 @@
     var miss = [], unsafeHit = false, warnings = [], fields = 0, cites = 0, hasBib = false, blocks = [];
     hunks.forEach(function (h) {
       var tex = newB.slice(h.k0, h.k1).join('\n\n');
-      var res = L.convert(tex, { images: S.images, labelKinds: kinds, bib: S.lib, citedKeys: cited });
+      var res = L.convert(tex, convOpts({ images: S.images, labelKinds: kinds, bib: S.lib, citedKeys: cited }));
       h.pkg = res.body ? L.buildPackage(res) : null;
       miss = miss.concat(res.missingImages);
       res.warnings.forEach(function (w) { if (warnings.indexOf(w) < 0) warnings.push(w); });
@@ -817,6 +845,7 @@
         try {
           Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, scheduleSelCheck);
         } catch (e) { /* sem eventos: segue manual */ }
+        loadProfile();
         loadLibrary();
         refreshOutline();
         // remove um vínculo esquecido de uma sessão anterior

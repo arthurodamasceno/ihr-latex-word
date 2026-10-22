@@ -25,7 +25,8 @@ fs.writeFileSync(path.join(__dirname, 'conteudo.tex'), src);
 const lib = new B.Library(fs.readFileSync(SRC + 'references.bib', 'utf8'));
 const png = fs.readFileSync(SRC + 'assets/fig.png');
 const images = { 'assets/fig.png': { base64: png.toString('base64'), contentType: 'image/png', width: png.readUInt32BE(16), height: png.readUInt32BE(20) } };
-const r = L.convert(src, { bib: lib, images, eqChapter: true, captionSep: ' – ' });
+lib.setStyle({ initials: true });
+const r = L.convert(src, { bib: lib, images, eqChapter: true, captionSep: ' – ', bibEmph: 'i', coverFrames: false });
 fs.writeFileSync(path.join(__dirname, 'conteudo.json'), JSON.stringify({
   body: r.body, rels: r.rels, media: r.media, numbering: r.nums.length ? L.numberingXml(r.nums) : '',
   footnotes: r.footnotes.length ? L.footnotesXml(r.footnotes) : '', warnings: r.warnings }));

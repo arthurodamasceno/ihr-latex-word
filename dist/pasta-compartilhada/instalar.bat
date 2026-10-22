@@ -11,6 +11,9 @@ echo.
 reg add "HKCU\Software\Microsoft\Office\16.0\WEF\TrustedCatalogs\{5e63d59a-2fb9-41c3-8b5e-79456743365e}" /v Id /t REG_SZ /d "{5e63d59a-2fb9-41c3-8b5e-79456743365e}" /f >nul || goto erro
 reg add "HKCU\Software\Microsoft\Office\16.0\WEF\TrustedCatalogs\{5e63d59a-2fb9-41c3-8b5e-79456743365e}" /v Url /t REG_SZ /d "%PASTA%" /f >nul || goto erro
 reg add "HKCU\Software\Microsoft\Office\16.0\WEF\TrustedCatalogs\{5e63d59a-2fb9-41c3-8b5e-79456743365e}" /v Flags /t REG_DWORD /d 1 /f >nul || goto erro
+call "%~dp0atualizar-modelos.bat" <nul >nul 2>&1
+echo Modelos de documento instalados (Arquivo ^> Novo ^> Pessoal).
+echo.
 echo Pronto! Agora:
 echo   1. Feche e abra o Word de novo.
 echo   2. Página Inicial ^> Suplementos ^> Avançado

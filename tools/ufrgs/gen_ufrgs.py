@@ -244,7 +244,8 @@ HDR = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr %s><w:p><w:
 
 R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
 rels = [('rIdS', R + 'styles', 'styles.xml'), ('rIdN', R + 'numbering', 'numbering.xml'), ('rIdSet', R + 'settings', 'settings.xml'),
-        ('rIdH1', R + 'header', 'header1.xml'), ('rIdFicha', R + 'image', 'media/ficha.png')]
+        ('rIdH1', R + 'header', 'header1.xml'), ('rIdFicha', R + 'image', 'media/ficha.png'),
+        ('rIdPerfil', R + 'customXml', '../customXml/item1.xml')]
 for x in rels_extra:
     rels.append((x['id'], x['type'], x['target']))
 if D.get('footnotes'):
@@ -254,6 +255,13 @@ RELS = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xm
 SETTINGS = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings %s><w:defaultTabStop w:val="708"/>'
             '<w:hyphenationZone w:val="425"/><w:characterSpacingControl w:val="doNotCompress"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>') % W
 
+# perfil do template para o suplemento LaTeX IHR (parte XML personalizada; passa do .dotx para os documentos novos)
+PERFIL = {"nome": "TCC Eng. Mecânica UFRGS", "legenda": " – ", "equacaoPorCapitulo": True,
+          "referencias": {"iniciais": True, "destaque": "italico"}, "capaComQuadros": False}
+PERF_XML = '<?xml version="1.0" encoding="UTF-8" standalone="no"?><perfil xmlns="urn:ihr-latex-word:perfil">%s</perfil>' % E(json.dumps(PERFIL, ensure_ascii=False))
+PERF_PROPS = ('<?xml version="1.0" encoding="UTF-8" standalone="no"?><ds:datastoreItem ds:itemID="{6A1F3C2E-8B4D-4E7A-9C1B-2D5E8F0A7B31}" '
+              'xmlns:ds="http://schemas.openxmlformats.org/officeDocument/2006/customXml"><ds:schemaRefs/></ds:datastoreItem>')
+
 def write(path, main_ct):
     CT = 'application/vnd.openxmlformats-officedocument.wordprocessingml.'
     types = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
@@ -262,6 +270,7 @@ def write(path, main_ct):
              '<Override PartName="/word/document.xml" ContentType="%s"/><Override PartName="/word/styles.xml" ContentType="%sstyles+xml"/>'
              '<Override PartName="/word/numbering.xml" ContentType="%snumbering+xml"/><Override PartName="/word/settings.xml" ContentType="%ssettings+xml"/>'
              '<Override PartName="/word/header1.xml" ContentType="%sheader+xml"/>%s'
+             '<Override PartName="/customXml/itemProps1.xml" ContentType="application/vnd.openxmlformats-officedocument.customXmlProperties+xml"/>'
              '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>') % (
         main_ct, CT, CT, CT, CT, ('<Override PartName="/word/footnotes.xml" ContentType="%sfootnotes+xml"/>' % CT) if D.get('footnotes') else '')
     z = zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED)
@@ -277,6 +286,10 @@ def write(path, main_ct):
     z.writestr('word/numbering.xml', NUMBERING)
     z.writestr('word/settings.xml', SETTINGS)
     z.writestr('word/header1.xml', HDR)
+    z.writestr('customXml/item1.xml', PERF_XML)
+    z.writestr('customXml/itemProps1.xml', PERF_PROPS)
+    z.writestr('customXml/_rels/item1.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+               '<Relationship Id="rId1" Type="%scustomXmlProps" Target="itemProps1.xml"/></Relationships>' % R)
     z.writestr('word/_rels/document.xml.rels', RELS)
     if D.get('footnotes'):
         z.writestr('word/footnotes.xml', D['footnotes'])
