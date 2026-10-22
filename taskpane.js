@@ -388,6 +388,21 @@
     }
     return pairs;
   }
+  function paraKey(s) { return (s || '').replace(/[^\p{L}\p{N}]/gu, '').toLowerCase(); }
+  // mapa índice-no-pacote → índice-na-coleção de parágrafos do Word (-1 = sem par)
+  function mapParas(A, B) {
+    var a = A.map(function (s, i) { return paraKey(s) || '\u0001' + i; });
+    var b = B.map(function (s, j) { return paraKey(s) || '\u0002' + j; });
+    var map = A.map(function () { return -1; });
+    var anchors = [[-1, -1]].concat(lcsPairs(a, b)).concat([[A.length, B.length]]);
+    for (var k = 1; k < anchors.length; k++) {
+      var p = anchors[k - 1], c = anchors[k];
+      if (c[0] < A.length) map[c[0]] = c[1];
+      var ga = c[0] - p[0] - 1, gb = c[1] - p[1] - 1;
+      if (ga === gb) for (var t = 1; t <= ga; t++) map[p[0] + t] = p[1] + t;     // trechos sem texto em comum, mesmo tamanho
+    }
+    return map;
+  }
   function makeHunks(oldN, newN, pairs) {
     var h = [], pi = 0, pj = 0;
     pairs.concat([[oldN, newN]]).forEach(function (p) {
@@ -397,12 +412,23 @@
     return h;
   }
   async function applyDiff(ctx, region, cur, force) {
-    var paras = region.paragraphs; paras.load('items/tableNestingLevel');
+    var paras = region.paragraphs; paras.load('items/tableNestingLevel,text');
     await ctx.sync();
     var P = paras.items;
-    var oldB = cur.blocks, newB = O.splitBlocks(ed.value);
-    if (cur.paraCount !== P.length) {
-      notice('Não consegui relacionar o LaTeX com os parágrafos deste trecho (' + cur.paraCount + ' × ' + P.length + '). Selecione um trecho menor e tente de novo.');
+    var newB = O.splitBlocks(ed.value);
+    // o pacote OOXML do Word pode ter parágrafos a mais/a menos que a coleção (ex.: parágrafo vazio no fim);
+    // relaciona os dois pelo texto e posiciona cada bloco nos parágrafos reais do documento
+    var map = mapParas(cur.paraTexts || [], P.map(function (p) { return p.text || ''; }));
+    var oldB = [], lost = [];
+    cur.blocks.forEach(function (b) {
+      var a = -1, z = -1;
+      for (var q = b.p0; q <= b.p1; q++) if (map[q] >= 0) { if (a < 0) a = map[q]; z = map[q]; }
+      if (a < 0) lost.push(b.tex.split('\n')[0]);
+      oldB.push(Object.assign({}, b, { p0: a, p1: z }));
+    });
+    if (lost.length) {
+      notice('Não consegui localizar no documento estes blocos do trecho: ' + lost.slice(0, 3).join(' | ') + '. Clique em "Recarregar do Word" e tente de novo.',
+        [{ label: 'Recarregar do Word', run: function () { reloadBound(); } }]);
       status(''); return null;
     }
     // blocos "stale" (formato antigo) nunca casam, para serem reescritos com o estilo atual
