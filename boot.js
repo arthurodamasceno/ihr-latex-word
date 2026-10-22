@@ -1,7 +1,7 @@
 /* Carregador do painel: define a versão e carrega o resto com ?v=VERSÃO */
 (function () {
   'use strict';
-  var V = '1.3.0';
+  var V = '1.4.0';
   window.IHRLX_VERSION = V;
   function css(h) { var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = h; document.head.appendChild(l); }
   function js(src) {

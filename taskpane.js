@@ -226,6 +226,8 @@
     S.suppressUntil = Date.now() + 1500;
     await ctx.sync();
     var r = await readRange(ctx, range);
+    await fillImages(ctx, range, r);
+    Object.keys(r.images).forEach(function (k) { if (!S.images[k]) S.images[k] = r.images[k]; });
     S.bound = true;
     S.paras = ps.items.length;
     S.base = r.latex;
@@ -297,6 +299,13 @@
         }
         var kinds = await labelKinds(ctx);
         var c = convertEditor(kinds);
+        if (c.res.missingImages.length && !force) {
+          notice('Faltam no painel as imagens ' + c.res.missingImages.join(', ') + '. Atualizar agora trocaria essas imagens do documento por marcadores de texto. Carregue-as em "Imagens" ou confirme.', [
+            { label: 'Atualizar mesmo assim', run: function () { notice(''); updateBound(true); } }
+          ]);
+          $('imgBox').open = true; status('');
+          return;
+        }
         var rng = b.insertOoxml(c.pkg, 'Replace');
         await ctx.sync();
         var ok = c.res.fields ? await updateFields(ctx, c.res) : true;
@@ -324,9 +333,53 @@
     finally { setBusy(false); }
   }
 
-  // lê a seleção atual (parágrafos inteiros) e vincula.
-  // Quebras de seção nunca entram no trecho: apagá-las mudaria cabeçalhos, rodapés e a capa.
-  async function readSelection(fromAuto) {
+  // Limita o trecho a uma seção e nunca inclui o parágrafo que guarda a quebra de seção
+  // (apagá-la mudaria cabeçalhos, rodapés e o fundo da capa).
+  async function limitToSection(ctx, range) {
+    var secs = ctx.document.sections; secs.load('items');
+    await ctx.sync();
+    if (secs.items.length < 2) return null;
+    var info = secs.items.map(function (sec, i) {
+      var x = range.intersectWithOrNullObject(sec.body.getRange('Whole'));
+      x.load('isNullObject');
+      return { i: i, x: x, last: sec.body.paragraphs.getLast() };
+    });
+    await ctx.sync();
+    var hit = info.filter(function (h) { return !h.x.isNullObject; });
+    if (!hit.length) return null;
+    var h = hit[0];
+    var ps = h.x.paragraphs; ps.load('items');
+    await ctx.sync();
+    var items = ps.items.slice();
+    if (h.i < secs.items.length - 1 && items.length) {
+      var cmp = items[items.length - 1].getRange('Whole').compareLocationWith(h.last.getRange('Whole'));
+      await ctx.sync();
+      if (cmp.value === 'Equal' || cmp.value === 'InsideStart' || cmp.value === 'InsideEnd' || cmp.value === 'Contains') items.pop();
+    }
+    if (hit.length === 1 && items.length === ps.items.length) return null;     // nada a cortar
+    if (!items.length) return { empty: true };
+    return { range: items[0].getRange('Whole').expandTo(items[items.length - 1].getRange('Whole')), n: items.length };
+  }
+
+  // completa imagens cujos bytes não vieram no OOXML, lendo-as pela API do Word
+  async function fillImages(ctx, range, r) {
+    var order = r.imageOrder || [];
+    if (!order.some(function (x) { return x.missing; })) return;
+    var pics = range.inlinePictures; pics.load('items');
+    await ctx.sync();
+    var srcs = pics.items.map(function (p) { return p.getBase64ImageSrc(); });
+    await ctx.sync();
+    order.filter(function (x) { return x.inline; }).forEach(function (im, i) {
+      if (!im.missing || !srcs[i] || !srcs[i].value) return;
+      var b64 = srcs[i].value.replace(/^data:[^,]*,/, '');
+      var ct = /^\/9j\//.test(b64) ? 'image/jpeg' : /^R0lG/.test(b64) ? 'image/gif' : 'image/png';
+      var sz = O.imageSize(b64);
+      r.images[im.name] = { base64: b64, contentType: ct, width: sz.w, height: sz.h };
+      im.missing = false;
+    });
+  }
+
+  async function readSelection(fromAuto, diag) {
     if (needWord()) return;
     setBusy(true);
     if (!fromAuto) status('Lendo a seleção…');
@@ -338,21 +391,24 @@
         var n = paras.items.length;
         if (!n) { status('Selecione um ou mais parágrafos no documento.', 'warn'); return; }
         var range = paras.items[0].getRange('Whole').expandTo(paras.items[n - 1].getRange('Whole'));
+        var trimmed = false, nParas = n;
+        var lim = await limitToSection(ctx, range);
+        if (lim && lim.empty) { status('A seleção contém só a quebra de seção, que não é editável pelo painel.', 'warn'); return; }
+        if (lim) { range = lim.range; nParas = lim.n; trimmed = true; }
         var r = await readRange(ctx, range);
-        var nParas = n, trimmed = false;
+        await fillImages(ctx, range, r);
+        if (diag) {
+          setEditor(['% Diagnóstico da leitura', '% parágrafos na seleção: ' + n + ' | no trecho: ' + nParas + ' | no OOXML: ' + r.paraCount + (trimmed ? ' | cortado na seção' : ''),
+            '% quebras de seção no OOXML: ' + JSON.stringify(r.sectBreaks), '% partes: ' + r.partNames.join(', '),
+            '% imagens: ' + JSON.stringify(r.imageOrder), '% avisos: ' + JSON.stringify(r.warnings)].join('\n') + '\n\n' + r.latex);
+          status('Diagnóstico gerado (nada foi vinculado).', 'ok');
+          return;
+        }
         if (r.sectBreaks && r.sectBreaks.length) {
-          if (r.paraCount !== n) {
-            S.bound = false; setEditor(r.latex);
-            notice('O trecho selecionado cruza uma quebra de seção e não pode ser vinculado. Selecione só a parte antes ou depois da quebra.');
-            status(''); renderMode();
-            return;
-          }
-          var k = r.sectBreaks[0], a, b;
-          if (k > 0) { a = 0; b = k - 1; } else { a = 1; b = (r.sectBreaks.length > 1 ? r.sectBreaks[1] : n) - 1; }
-          if (b < a) { status('A seleção contém só uma quebra de seção, que não é editável pelo painel.', 'warn'); return; }
-          range = paras.items[a].getRange('Whole').expandTo(paras.items[b].getRange('Whole'));
-          r = await readRange(ctx, range);
-          nParas = b - a + 1; trimmed = true;
+          S.bound = false; setEditor(r.latex);
+          notice('O trecho contém uma quebra de seção e não pode ser vinculado. Selecione só a parte antes ou depois da quebra.');
+          status(''); renderMode();
+          return;
         }
         if (!api('1.4')) {
           setEditor(r.latex);
@@ -367,6 +423,8 @@
         setEditor(r.latex);
         notice(r.unsafe.length ? 'Atenção: o trecho contém ' + r.unsafe.join(', ') + ', que não têm equivalente em LaTeX e serão perdidos se você atualizar.' : '');
         var w = r.warnings.slice();
+        var miss = (r.imageOrder || []).filter(function (x) { return x.missing; }).map(function (x) { return x.name; });
+        if (miss.length) w.unshift('Não consegui ler ' + miss.length + ' imagem(ns) do documento (' + miss.join(', ') + '). Não atualize o trecho sem carregá-las em "Imagens", ou elas serão trocadas por marcadores.');
         if (trimmed) w.unshift('O trecho foi limitado até a quebra de seção (ela fica intacta no documento).');
         status(w.length ? 'Trecho lido e vinculado:' : 'Trecho lido e vinculado.', w.length ? 'warn' : 'ok', w);
       });
@@ -455,7 +513,7 @@
 
   // ------------------------------------------------------- botões
   $('btnPrimary').addEventListener('click', primary);
-  $('btnRead').addEventListener('click', function () { readSelection(false); });
+  $('btnRead').addEventListener('click', function (ev) { readSelection(false, ev.shiftKey); });
   $('btnUnbind').addEventListener('click', function () { unbind(!dirty()); status('Trecho desvinculado.', ''); });
 
   if (typeof Office !== 'undefined') {
