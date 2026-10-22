@@ -3,7 +3,8 @@
 
 INSTALAR (uma vez, estando na rede da empresa ou na VPN)
  1. Feche o Word.
- 2. Abra esta pasta pelo endereço de rede (\\...) e dê dois cliques em "instalar.bat".
+ 2. Aperte Win+R, digite \\DPIHRCSL000492\LaTeX-IHR e dê Enter.
+    Na pasta que abrir, dê dois cliques em "instalar.bat".
  3. Abra o Word: Página Inicial > Suplementos > Mais Suplementos
     (em versões mais antigas: Inserir > Meus Suplementos).
  4. Aba PASTA COMPARTILHADA > LaTeX IHR > Adicionar.
