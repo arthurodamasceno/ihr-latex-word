@@ -86,3 +86,16 @@ button.small { padding: 3px 8px; font-size: 12px; }
 #bibList li:hover { background: var(--campo); }
 #bibList li code { color: var(--azul2); }
 #bibList li span { color: var(--suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+#outBox summary button { margin-left: 6px; font-weight: 400; }
+#outList { list-style: none; padding: 0; margin: 6px 0 0; max-height: 190px; overflow: auto; border: 1px solid var(--borda); border-radius: 4px; }
+#outList li { padding: 3px 8px; cursor: pointer; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#outList li:hover { background: var(--campo); color: var(--azul2); }
+#outList li.all { font-weight: 600; border-bottom: 1px solid var(--borda); }
+#outList li.lv1 { font-weight: 600; padding-left: 8px; }
+#outList li.lv2 { padding-left: 20px; }
+#outList li.lv3 { padding-left: 32px; }
+#outList li.lv4 { padding-left: 44px; }
+#outList li.lv5 { padding-left: 56px; }
+#outList li.lv6 { padding-left: 68px; }
+#editor { min-height: 180px; }

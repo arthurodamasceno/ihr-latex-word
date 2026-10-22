@@ -367,7 +367,7 @@
         var ok = c.res.fields ? await updateFields(ctx, c.res) : true;
         var bibMsg = c.res.cites && !c.res.hasBib && S.lib && S.lib.count() ? await regenBib(ctx, true) : '';
         if (api('1.4')) await bindTo(ctx, rng, ed.value);
-        notice(''); renderMode();
+        notice(''); renderMode(); refreshOutline();
         finish(c.res, (S.bound ? 'Inserido. O trecho continua vinculado: Ctrl+Enter atualiza ele.' : 'Inserido no documento.') + (bibMsg ? ' ' + bibMsg : ''), ok);
       });
     } catch (e) {
@@ -375,14 +375,103 @@
     } finally { setBusy(false); }
   }
 
+  // ---- diferença por blocos: só os blocos alterados são reescritos no documento
+  function lcsPairs(a, b) {
+    var n = a.length, m = b.length, i, j;
+    var dp = []; for (i = 0; i <= n; i++) { dp.push(new Uint16Array(m + 1)); }
+    for (i = n - 1; i >= 0; i--) for (j = m - 1; j >= 0; j--) dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    var pairs = []; i = 0; j = 0;
+    while (i < n && j < m) {
+      if (a[i] === b[j]) { pairs.push([i, j]); i++; j++; }
+      else if (dp[i + 1][j] >= dp[i][j + 1]) i++; else j++;
+    }
+    return pairs;
+  }
+  function makeHunks(oldN, newN, pairs) {
+    var h = [], pi = 0, pj = 0;
+    pairs.concat([[oldN, newN]]).forEach(function (p) {
+      if (p[0] > pi || p[1] > pj) h.push({ i0: pi, i1: p[0], k0: pj, k1: p[1] });
+      pi = p[0] + 1; pj = p[1] + 1;
+    });
+    return h;
+  }
+  async function applyDiff(ctx, region, cur, force) {
+    var paras = region.paragraphs; paras.load('items/tableNestingLevel');
+    await ctx.sync();
+    var P = paras.items;
+    var oldB = cur.blocks, newB = O.splitBlocks(ed.value);
+    if (cur.paraCount !== P.length) {
+      notice('Não consegui relacionar o LaTeX com os parágrafos deste trecho (' + cur.paraCount + ' × ' + P.length + '). Selecione um trecho menor e tente de novo.');
+      status(''); return null;
+    }
+    var pairs = lcsPairs(oldB.map(function (b) { return norm(b.tex); }), newB.map(norm));
+    var matched = {}; pairs.forEach(function (p) { matched[p[0]] = true; });
+    var lostFixed = oldB.filter(function (b, i) { return b.fixed && !matched[i]; });
+    if (lostFixed.length) {
+      notice('Estes blocos não podem ser alterados pelo painel (sumário e quebras de seção do Word). Deixe as linhas exatamente como estavam: ' +
+        lostFixed.map(function (b) { return b.tex.split('\n')[0]; }).join(' | '), [{ label: 'Recarregar do Word', run: function () { reloadBound(); } }]);
+      status(''); return null;
+    }
+    var hunks = makeHunks(oldB.length, newB.length, pairs);
+    if (!hunks.length) return { changed: 0 };
+    var kinds = await labelKinds(ctx), cited = await citedKeys(ctx);
+    var miss = [], unsafeHit = false, warnings = [], fields = 0, cites = 0, hasBib = false, blocks = [];
+    hunks.forEach(function (h) {
+      var tex = newB.slice(h.k0, h.k1).join('\n\n');
+      var res = L.convert(tex, { images: S.images, labelKinds: kinds, bib: S.lib, citedKeys: cited });
+      h.pkg = res.body ? L.buildPackage(res) : null;
+      miss = miss.concat(res.missingImages);
+      res.warnings.forEach(function (w) { if (warnings.indexOf(w) < 0) warnings.push(w); });
+      fields += res.fields; cites += res.cites; hasBib = hasBib || res.hasBib; blocks = blocks.concat(res.blocks);
+      for (var q = h.i0; q < h.i1; q++) if (oldB[q].unsafe) unsafeHit = true;
+    });
+    if (!force && (miss.length || unsafeHit)) {
+      var why = [];
+      if (miss.length) why.push('faltam no painel as imagens ' + miss.join(', ') + ' (elas virariam marcadores de texto)');
+      if (unsafeHit) why.push('um bloco alterado contém ' + S.unsafe.join(', ') + ', que seriam perdidos');
+      notice('Atenção: ' + why.join('; ') + '.', [{ label: 'Atualizar mesmo assim', run: function () { notice(''); updateBound(true); } }]);
+      if (miss.length) $('imgBox').open = true;
+      status(''); return null;
+    }
+    function edge(i, which) {      // parágrafo i (ou a tabela inteira que o contém)
+      if (P[i].tableNestingLevel > 0) return P[i].parentTableOrNullObject.getRange('Whole');
+      return P[i].getRange('Whole');
+    }
+    // aplica de trás para frente, para os índices anteriores continuarem válidos
+    var inserted = {};
+    for (var x = hunks.length - 1; x >= 0; x--) {
+      var h = hunks[x];
+      if (h.i1 > h.i0) {
+        var rg = edge(oldB[h.i0].p0).expandTo(edge(oldB[h.i1 - 1].p1));
+        if (h.pkg) inserted[x] = rg.insertOoxml(h.pkg, 'Replace'); else rg.delete();
+      } else if (h.pkg) {
+        if (h.i0 > 0) inserted[x] = edge(oldB[h.i0 - 1].p1).insertOoxml(h.pkg, 'After');
+        else if (oldB.length) inserted[x] = edge(oldB[0].p0).insertOoxml(h.pkg, 'Before');
+        else inserted[x] = region.insertOoxml(h.pkg, 'Replace');
+      }
+    }
+    await ctx.sync();
+    // novo intervalo do trecho: primeira e última peça que sobraram/entraram
+    var pieces = [], used = {};
+    var replacedAt = {}, afterIdx = {};
+    hunks.forEach(function (h, x) {
+      if (h.i1 > h.i0) { for (var q = oldB[h.i0].p0; q <= oldB[h.i1 - 1].p1; q++) replacedAt[q] = x; }
+      else { var a0 = h.i0 > 0 ? oldB[h.i0 - 1].p1 : -1; (afterIdx[a0] = afterIdx[a0] || []).push(x); }
+    });
+    (afterIdx[-1] || []).forEach(function (x) { if (inserted[x]) pieces.push(inserted[x]); });
+    for (var q2 = 0; q2 < P.length; q2++) {
+      if (replacedAt[q2] !== undefined) {
+        var hx = replacedAt[q2];
+        if (!used[hx]) { used[hx] = 1; if (inserted[hx]) pieces.push(inserted[hx]); }
+      } else pieces.push(P[q2]);
+      (afterIdx[q2] || []).forEach(function (x) { if (inserted[x]) pieces.push(inserted[x]); });
+    }
+    var reg = pieces.length ? pieces[0].getRange('Whole').expandTo(pieces[pieces.length - 1].getRange('Whole')) : region;
+    return { changed: hunks.length, region: reg, warnings: warnings, fields: fields, cites: cites, hasBib: hasBib, blocks: blocks };
+  }
+
   async function updateBound(force) {
     if (needWord()) return;
-    if (S.unsafe.length && !force && !($('unsafeOk') && $('unsafeOk').checked)) {
-      notice('O trecho vinculado contém ' + S.unsafe.join(', ') + ', que não têm equivalente em LaTeX e serão perdidos ao atualizar.',
-        [{ checkbox: true, id: 'unsafeOk', label: 'Atualizar mesmo assim' }]);
-      status('Confirme no aviso acima para continuar.', 'warn');
-      return;
-    }
     setBusy(true); status('Atualizando…');
     try {
       await Word.run(async function (ctx) {
@@ -398,22 +487,14 @@
           status('');
           return;
         }
-        var kinds = await labelKinds(ctx);
-        var c = convertEditor(kinds, await citedKeys(ctx));
-        if (c.res.missingImages.length && !force) {
-          notice('Faltam no painel as imagens ' + c.res.missingImages.join(', ') + '. Atualizar agora trocaria essas imagens do documento por marcadores de texto. Carregue-as em "Imagens" ou confirme.', [
-            { label: 'Atualizar mesmo assim', run: function () { notice(''); updateBound(true); } }
-          ]);
-          $('imgBox').open = true; status('');
-          return;
-        }
-        var rng = b.insertOoxml(c.pkg, 'Replace');
-        await ctx.sync();
-        var ok = c.res.fields ? await updateFields(ctx, c.res) : true;
-        var bibMsg = c.res.cites && !c.res.hasBib && S.lib && S.lib.count() ? await regenBib(ctx, true) : '';
-        await bindTo(ctx, rng, ed.value);
-        notice(''); renderMode();
-        finish(c.res, 'Trecho atualizado. Ele continua vinculado ao painel.' + (bibMsg ? ' ' + bibMsg : ''), ok);
+        var d = await applyDiff(ctx, b, cur, force);
+        if (!d) return;                                   // aviso já mostrado
+        if (!d.changed) { status('Nada mudou em relação ao documento.', 'ok'); return; }
+        var ok = d.fields ? await updateFields(ctx, { blocks: d.blocks }) : true;
+        var bibMsg = d.cites && !d.hasBib && S.lib && S.lib.count() ? await regenBib(ctx, true) : '';
+        await bindTo(ctx, d.region, ed.value);
+        notice(''); renderMode(); refreshOutline();
+        finish({ warnings: d.warnings, fields: d.fields }, 'Trecho atualizado: ' + d.changed + ' bloco(s) reescrito(s), o resto ficou intocado.' + (bibMsg ? ' ' + bibMsg : ''), ok);
       });
     } catch (e) {
       status('Não foi possível atualizar: ' + errMsg(e), 'err');
@@ -494,9 +575,6 @@
         if (!n) { status('Selecione um ou mais parágrafos no documento.', 'warn'); return; }
         var range = paras.items[0].getRange('Whole').expandTo(paras.items[n - 1].getRange('Whole'));
         var trimmed = false, nParas = n;
-        var lim = await limitToSection(ctx, range);
-        if (lim && lim.empty) { status('A seleção contém só a quebra de seção, que não é editável pelo painel.', 'warn'); return; }
-        if (lim) { range = lim.range; nParas = lim.n; trimmed = true; }
         var r = await readRange(ctx, range);
         await fillImages(ctx, range, r);
         if (diag) {
@@ -506,12 +584,7 @@
           status('Diagnóstico gerado (nada foi vinculado).', 'ok');
           return;
         }
-        if (r.sectBreaks && r.sectBreaks.length) {
-          S.bound = false; setEditor(r.latex);
-          notice('O trecho contém uma quebra de seção e não pode ser vinculado. Selecione só a parte antes ou depois da quebra.');
-          status(''); renderMode();
-          return;
-        }
+
         if (!api('1.4')) {
           setEditor(r.latex);
           status('Esta versão do Word não permite vincular o trecho: use "Inserir no cursor" com o trecho selecionado.', 'warn');
@@ -523,11 +596,11 @@
         S.bound = true; S.paras = nParas; S.base = r.latex; S.clean = r.latex; S.unsafe = r.unsafe;
         Object.keys(r.images).forEach(function (k2) { S.images[k2] = r.images[k2]; }); renderImages();
         setEditor(r.latex);
-        notice(r.unsafe.length ? 'Atenção: o trecho contém ' + r.unsafe.join(', ') + ', que não têm equivalente em LaTeX e serão perdidos se você atualizar.' : '');
+        notice('');
         var w = r.warnings.slice();
         var miss = (r.imageOrder || []).filter(function (x) { return x.missing; }).map(function (x) { return x.name; });
         if (miss.length) w.unshift('Não consegui ler ' + miss.length + ' imagem(ns) do documento (' + miss.join(', ') + '). Não atualize o trecho sem carregá-las em "Imagens", ou elas serão trocadas por marcadores.');
-        if (trimmed) w.unshift('O trecho foi limitado até a quebra de seção (ela fica intacta no documento).');
+        if (r.sectBreaks && r.sectBreaks.length) w.unshift('O trecho tem quebra(s) de seção: elas aparecem como uma linha de comentário (%) e ficam intactas no documento.');
         status(w.length ? 'Trecho lido e vinculado:' : 'Trecho lido e vinculado.', w.length ? 'warn' : 'ok', w);
       });
     } catch (e) {
@@ -613,6 +686,72 @@
     } catch (e) { /* silencioso: a leitura automática não deve incomodar */ }
   }
 
+  // ------------------------------------------------------- estrutura (árvore de títulos)
+  var OUT = [];
+  async function scanOutline(ctx) {
+    var ps = ctx.document.body.paragraphs; ps.load('items/text,styleBuiltIn');
+    await ctx.sync();
+    var heads = [];
+    ps.items.forEach(function (p, i) {
+      var m = /^Heading([1-6])$/.exec(p.styleBuiltIn || '');
+      if (m && (p.text || '').trim()) heads.push({ idx: i, level: parseInt(m[1], 10), text: p.text.trim() });
+    });
+    var lis = heads.map(function (h) { var li = ps.items[h.idx].listItemOrNullObject; li.load('listString'); return li; });
+    if (lis.length) await ctx.sync();
+    heads.forEach(function (h, k) { h.num = lis[k] && !lis[k].isNullObject ? (lis[k].listString || '') : ''; });
+    return { ps: ps.items, heads: heads };
+  }
+  function renderOutline() {
+    var ul = $('outList'); ul.innerHTML = '';
+    function add(label, cls, k, title) {
+      var li = document.createElement('li'); li.className = cls; li.textContent = label; li.title = title || label;
+      li.onclick = function () { openSection(k); };
+      ul.appendChild(li);
+    }
+    add('Documento inteiro', 'lv0 all', -1, 'Vincula o documento todo (a capa, o sumário e as quebras de seção ficam protegidos)');
+    if (OUT.pre) add('Capa e pré-textuais', 'lv0', -2);
+    OUT.forEach(function (h, k) { add((h.num ? h.num + '  ' : '') + h.text, 'lv' + h.level, k); });
+  }
+  async function refreshOutline() {
+    if (typeof Word === 'undefined') return;
+    try {
+      await Word.run(async function (ctx) {
+        var o = await scanOutline(ctx);
+        OUT = o.heads; OUT.pre = o.heads.length ? o.heads[0].idx > 0 : o.ps.length > 0;
+      });
+      renderOutline();
+    } catch (e) { /* sem estrutura */ }
+  }
+  async function openSection(k) {
+    if (dirty()) {
+      notice('Há edições no painel ainda não aplicadas ao trecho vinculado.', [
+        { label: 'Aplicar (Ctrl+Enter)', primary: true, run: function () { updateBound(false); } },
+        { label: 'Descartar e abrir a seção', run: function () { S.clean = ed.value; openSection(k); } }
+      ]);
+      return;
+    }
+    try {
+      await Word.run(async function (ctx) {
+        var o = await scanOutline(ctx);
+        OUT = o.heads; OUT.pre = o.heads.length ? o.heads[0].idx > 0 : o.ps.length > 0;
+        var ps = o.ps, a = 0, z = ps.length - 1;
+        if (k === -2) z = o.heads.length ? o.heads[0].idx - 1 : z;
+        else if (k >= 0) {
+          var h = o.heads[k]; if (!h) return;
+          a = h.idx;
+          for (var q = k + 1; q < o.heads.length; q++) if (o.heads[q].level <= h.level) { z = o.heads[q].idx - 1; break; }
+        }
+        if (z < a) return;
+        S.suppressUntil = Date.now() + 1500;
+        ps[a].getRange('Whole').expandTo(ps[z].getRange('Whole')).select();
+        await ctx.sync();
+      });
+      renderOutline();
+      await readSelection(false);
+    } catch (e) { status('Não foi possível abrir a seção: ' + errMsg(e), 'err'); }
+  }
+  $('btnOutline').addEventListener('click', refreshOutline);
+
   // ------------------------------------------------------- botões
   $('bibInput').addEventListener('change', function (ev) {
     var f = (ev.target.files || [])[0]; ev.target.value = '';
@@ -651,6 +790,7 @@
           Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, scheduleSelCheck);
         } catch (e) { /* sem eventos: segue manual */ }
         loadLibrary();
+        refreshOutline();
         // remove um vínculo esquecido de uma sessão anterior
         Word.run(async function (ctx) { ctx.document.deleteBookmark(BM); await ctx.sync(); }).catch(function () {});
       }
