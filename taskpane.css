@@ -47,7 +47,7 @@ button.primary { background: var(--azul); border-color: var(--azul); color: #fff
 button.primary:hover:not(:disabled) { background: #284a8a; }
 .readinfo { font-size: 12px; color: var(--suave); }
 .readinfo label { display: block; margin-top: 4px; color: var(--aviso); }
-.hidden { display: none; }
+.hidden { display: none !important; }
 .status { font-size: 12px; min-height: 1em; white-space: pre-wrap; }
 .status.ok { color: var(--ok); }
 .status.warn { color: var(--aviso); }
