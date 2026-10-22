@@ -824,7 +824,7 @@
       }
     });
   }
-  $('ver').textContent = 'v' + VERSION;
+  $('ver').textContent = 'v' + VERSION + (/\/stable\//.test(location.pathname) ? '' : ' · canal de teste');
   renderImages();
   renderMode();
 })();

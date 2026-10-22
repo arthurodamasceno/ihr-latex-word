@@ -8,7 +8,7 @@
   <Version>1.0.0.0</Version>
   <ProviderName>Damasceno - ICT IHR</ProviderName>
   <DefaultLocale>pt-BR</DefaultLocale>
-  <DisplayName DefaultValue="LaTeX IHR"/>
+  <DisplayName DefaultValue="LaTeX IHR (teste)"/>
   <Description DefaultValue="Escreva em LaTeX e insira no Word com os estilos do template de relatório do IHR. Também converte trechos do documento em LaTeX para edição."/>
   <IconUrl DefaultValue="https://arthurodamasceno.github.io/ihr-latex-word/assets/icon-32.png"/>
   <HighResolutionIconUrl DefaultValue="https://arthurodamasceno.github.io/ihr-latex-word/assets/icon-64.png"/>
@@ -82,7 +82,7 @@
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="LaTeX IHR pronto"/>
-        <bt:String id="Group.Label" DefaultValue="LaTeX"/>
+        <bt:String id="Group.Label" DefaultValue="LaTeX (teste)"/>
         <bt:String id="Button.Label" DefaultValue="Editor LaTeX"/>
       </bt:ShortStrings>
       <bt:LongStrings>

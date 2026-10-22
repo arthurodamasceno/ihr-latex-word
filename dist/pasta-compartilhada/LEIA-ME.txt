@@ -1,0 +1,29 @@
+﻿LaTeX IHR — suplemento do Word para escrever em LaTeX com o template do IHR
+============================================================================
+
+INSTALAR (uma vez, estando na rede da empresa ou na VPN)
+ 1. Feche o Word.
+ 2. Abra esta pasta pelo endereço de rede (\\...) e dê dois cliques em "instalar.bat".
+ 3. Abra o Word: Página Inicial > Suplementos > Mais Suplementos
+    (em versões mais antigas: Inserir > Meus Suplementos).
+ 4. Aba PASTA COMPARTILHADA > LaTeX IHR > Adicionar.
+ 5. Pronto: botão "Editor LaTeX" na guia Página Inicial.
+
+USAR
+ - Funciona no Word para Windows e precisa de internet (o painel é carregado da web).
+   Nenhum texto do documento sai do seu computador: a conversão roda no próprio painel.
+ - Crie o documento a partir do "Template Relatório v4".
+ - Selecione um trecho (ou clique numa seção em "Estrutura do documento"): ele vira LaTeX
+   no painel. Edite e clique em "Atualizar trecho" (Ctrl+Enter). Só o que mudou é reescrito.
+ - Com o cursor num ponto vazio, o que você escrever é inserido ali.
+ - Referências: carregue um .bib em "Referências", cite com \cite{chave} e use
+   \printbibliography no fim. Quem não usa o suplemento pode continuar editando o documento
+   normalmente, inclusive acrescentando referências à mão.
+ - A lista do que é suportado está no próprio painel ("O que é suportado").
+
+PROBLEMAS
+ - Painel em branco, travado ou com versão antiga: feche o Word e rode "limpar-cache.bat".
+ - Para desinstalar: "remover.bat".
+ - Dúvidas e sugestões: Damasceno.
+
+Obs.: não coloque outros arquivos .xml nesta pasta (o Word lê todos como suplementos).

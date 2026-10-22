@@ -1,0 +1,72 @@
+<header>
+    <div class="brand"><img src="assets/icon-32.png" alt=""><span>LaTeX <b>IHR</b></span></div>
+    <select id="snippets" title="Inserir um modelo no editor">
+      <option value="">+ Modelo…</option>
+      <option value="secao">Seções (títulos 1–3)</option>
+      <option value="figura">Figura</option>
+      <option value="tabela">Tabela padrão IHR</option>
+      <option value="quadro">Quadro (com grade)</option>
+      <option value="equacao">Equação numerada</option>
+      <option value="listas">Listas</option>
+      <option value="texto">Formatação de texto</option>
+      <option value="sumario">Sumário</option>
+    </select>
+  </header>
+
+  <details id="outBox" open>
+    <summary>Estrutura do documento <button id="btnOutline" class="link" title="Atualizar a árvore">atualizar</button></summary>
+    <ul id="outList"></ul>
+  </details>
+
+  <textarea id="editor" spellcheck="false" placeholder="Escreva em LaTeX. Ex.:&#10;&#10;\section{Resultados}&#10;Texto com $E = mc^2$ e referência à Figura~\ref{fig:x}.&#10;&#10;Ctrl+Enter insere no cursor."></textarea>
+
+  <div id="modeBar" class="modebar insert">
+    <span class="dot"></span><span id="modeText">Modo inserção</span>
+    <button id="btnUnbind" class="link hidden" title="Desliga o painel do trecho">desvincular</button>
+  </div>
+
+  <div class="actions">
+    <button id="btnPrimary" class="primary">Inserir no cursor</button>
+    <button id="btnRead" title="Converte os parágrafos selecionados no Word em LaTeX e vincula o trecho">Ler seleção</button>
+  </div>
+  <label class="toggle"><input id="autoRead" type="checkbox" checked> Ler a seleção automaticamente</label>
+  <div id="notice" class="notice hidden"></div>
+
+  <div id="status" class="status"></div>
+
+  <details id="bibBox">
+    <summary>Referências <span id="bibCount" class="count">0</span></summary>
+    <p class="hint">Carregue um <code>.bib</code>: as entradas ficam guardadas dentro do documento. Clique numa entrada para inserir <code>\cite{chave}</code>. A lista em "Referências" segue a ABNT e mantém as entradas digitadas à mão por outras pessoas.</p>
+    <div class="row">
+      <label class="filebtn">Carregar .bib…<input id="bibInput" type="file" accept=".bib,.txt"></label>
+      <button id="btnBibUpdate" class="small">Atualizar lista no documento</button>
+    </div>
+    <input id="bibFilter" type="search" placeholder="Filtrar por chave, autor ou título">
+    <ul id="bibList"></ul>
+  </details>
+
+  <details id="imgBox">
+    <summary>Imagens <span id="imgCount" class="count">0</span></summary>
+    <p class="hint">Carregue aqui os arquivos usados em <code>\includegraphics{nome}</code>. Imagens lidas do documento entram na lista automaticamente.</p>
+    <label class="filebtn">Carregar imagens…<input id="imgInput" type="file" accept="image/*" multiple></label>
+    <ul id="imgList"></ul>
+  </details>
+
+  <details>
+    <summary>O que é suportado</summary>
+    <ul class="help">
+      <li><code>\chapter</code> … <code>\subparagraph</code> → Títulos 1 a 6 (com <code>*</code> = sem número)</li>
+      <li><code>\textbf</code>, <code>\textit</code>, <code>\emph</code>, <code>\underline</code>, <code>\texttt</code>, sobrescrito e subscrito</li>
+      <li><code>$…$</code>, <code>\[…\]</code>, <code>equation</code>, <code>align</code> → equações nativas do Word</li>
+      <li><code>figure</code>, <code>table</code>, <code>quadro</code> com <code>\caption</code>, <code>\label</code>, <code>\fonte</code></li>
+      <li><code>tabular</code> (com <code>\multicolumn</code>), <code>itemize</code>, <code>enumerate</code></li>
+      <li><code>\ref</code>, <code>\eqref</code>, <code>\pageref</code> → referências cruzadas do Word</li>
+      <li><code>\footnote</code>, <code>\url</code>, <code>\href</code>, <code>\newpage</code>, <code>\tableofcontents</code></li>
+      <li><code>\cite</code>, <code>\textcite</code>/<code>\citeonline</code>, <code>\citeauthor</code>, <code>\citeyear</code> → citações ABNT (autor-data)</li>
+      <li><code>\chapter*{…}</code> → Título sem numeração (centralizado, entra no sumário)</li>
+      <li><code>\printbibliography</code> → capítulo Referências; <code>\refmanual{…}</code> → entrada digitada à mão</li>
+    </ul>
+    <p class="hint">Como funciona: selecione um trecho no Word e ele aparece aqui, vinculado. Edite e use <b>Ctrl+Enter</b> para atualizar o trecho. Para escrever algo novo, clique num parágrafo vazio do documento (modo inserção). Na capa (template v4), use <code>\title</code>, <code>\subtitulo</code>, <code>\local</code>, <code>\date</code> e <code>\maketitle</code>. Só os blocos que você altera são reescritos; sumário e quebras de seção (linhas com %) ficam protegidos. Clique num título em <b>Estrutura</b> para abrir aquela seção.</p>
+  </details>
+
+  <footer><span id="ver"></span> · estilos do template IHR v4</footer>
