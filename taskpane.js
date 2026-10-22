@@ -33,6 +33,7 @@
 
   var $ = function (id) { return document.getElementById(id); };
   var ed = $('editor');
+  function isUnnum(p) { return /sem numera/i.test(p.style || ''); }
   function norm(s) { return (s || '').replace(/\s+/g, ' ').trim(); }
   function dirty() { return S.bound && norm(ed.value) !== norm(S.clean); }
 
@@ -307,11 +308,11 @@
   async function regenBib(ctx, createIfMissing) {
     if (!S.lib || !S.lib.count()) return 'Nenhum .bib carregado.';
     var keys = (await citedKeys(ctx)).filter(function (k) { return S.lib.has(k); });
-    var paras = ctx.document.body.paragraphs; paras.load('items/text,styleBuiltIn');
+    var paras = ctx.document.body.paragraphs; paras.load('items/text,styleBuiltIn,style');
     await ctx.sync();
     var items = paras.items, h = -1;
     for (var i = items.length - 1; i >= 0; i--) {
-      if (items[i].styleBuiltIn === 'Heading1' && /^REFER[EÊ]NCIAS$/i.test((items[i].text || '').trim())) { h = i; break; }
+      if ((items[i].styleBuiltIn === 'Heading1' || isUnnum(items[i])) && /^REFER[EÊ]NCIAS$/i.test((items[i].text || '').trim())) { h = i; break; }
     }
     if (h < 0) {
       if (!createIfMissing || !keys.length) return keys.length ? 'Não encontrei o capítulo "Referências" no documento.' : 'Nenhuma citação do .bib no documento.';
@@ -404,7 +405,8 @@
       notice('Não consegui relacionar o LaTeX com os parágrafos deste trecho (' + cur.paraCount + ' × ' + P.length + '). Selecione um trecho menor e tente de novo.');
       status(''); return null;
     }
-    var pairs = lcsPairs(oldB.map(function (b) { return norm(b.tex); }), newB.map(norm));
+    // blocos "stale" (formato antigo) nunca casam, para serem reescritos com o estilo atual
+    var pairs = lcsPairs(oldB.map(function (b, i) { return b.stale ? '\u0001' + i : norm(b.tex); }), newB.map(norm));
     var matched = {}; pairs.forEach(function (p) { matched[p[0]] = true; });
     var lostFixed = oldB.filter(function (b, i) { return b.fixed && !matched[i]; });
     if (lostFixed.length) {
@@ -689,11 +691,11 @@
   // ------------------------------------------------------- estrutura (árvore de títulos)
   var OUT = [];
   async function scanOutline(ctx) {
-    var ps = ctx.document.body.paragraphs; ps.load('items/text,styleBuiltIn');
+    var ps = ctx.document.body.paragraphs; ps.load('items/text,styleBuiltIn,style');
     await ctx.sync();
     var heads = [];
     ps.items.forEach(function (p, i) {
-      var m = /^Heading([1-6])$/.exec(p.styleBuiltIn || '');
+      var m = /^Heading([1-6])$/.exec(p.styleBuiltIn || '') || (isUnnum(p) ? [0, '1'] : null);
       if (m && (p.text || '').trim()) heads.push({ idx: i, level: parseInt(m[1], 10), text: p.text.trim() });
     });
     var lis = heads.map(function (h) { var li = ps.items[h.idx].listItemOrNullObject; li.load('listString'); return li; });

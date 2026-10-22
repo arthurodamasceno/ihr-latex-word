@@ -53,7 +53,7 @@ doc = doc[:body_start] + cover + sumario + doc[paras[i_sum][1]:]
 def R(parts):
     return '<w:p><w:pPr><w:pStyle w:val="Bibliografia"/></w:pPr>' + ''.join(
         '<w:r>%s<w:t xml:space="preserve">%s</w:t></w:r>' % ('<w:rPr><w:b/><w:bCs/></w:rPr>' if b else '', t) for t, b in parts) + '</w:p>'
-refs = ('<w:p><w:pPr><w:pStyle w:val="Ttulo1"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="0"/></w:numPr></w:pPr><w:r><w:t>Referências</w:t></w:r></w:p>' +
+refs = ('<w:p><w:pPr><w:pStyle w:val="TtuloSemNumerao"/></w:pPr><w:r><w:t>Referências</w:t></w:r></w:p>' +
         R([('ASSOCIAÇÃO BRASILEIRA DE NORMAS TÉCNICAS. ', 0), ('NBR 6023', 1), (': informação e documentação: referências: elaboração. Rio de Janeiro: ABNT, 2018.', 0)]) +
         R([('ASSOCIAÇÃO BRASILEIRA DE NORMAS TÉCNICAS. ', 0), ('NBR 10520', 1), (': informação e documentação: citações em documentos: apresentação. Rio de Janeiro: ABNT, 2023.', 0)]))
 last = doc.rfind('<w:sectPr')
@@ -115,7 +115,11 @@ sty = re.sub(r'<w:style [^>]*w:styleId="CabealhodoSumrio".*?</w:style>', toc_hea
 bib_style = ('<w:style w:type="paragraph" w:styleId="Bibliografia"><w:name w:val="Bibliography"/><w:basedOn w:val="Normal"/><w:next w:val="Bibliografia"/><w:uiPriority w:val="37"/><w:unhideWhenUsed/><w:qFormat/>'
  '<w:pPr><w:spacing w:after="240" w:line="240" w:lineRule="auto"/><w:ind w:firstLine="0"/><w:jc w:val="left"/></w:pPr></w:style>')
 sty = re.sub(r'<w:style [^>]*w:styleId="Bibliografia".*?</w:style>', bib_style, sty, flags=re.S)
-sty = sty.replace('</w:styles>', new + '</w:styles>')
+# títulos sem número (Referências, Resumo, Apêndice...): como o Título 1, centralizado, entra no sumário
+unnum = ('<w:style w:type="paragraph" w:customStyle="1" w:styleId="TtuloSemNumerao"><w:name w:val="Título sem numeração"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/>'
+ '<w:pPr><w:keepNext/><w:keepLines/><w:pageBreakBefore/><w:spacing w:line="480" w:lineRule="auto"/><w:ind w:firstLine="0"/><w:jc w:val="center"/><w:outlineLvl w:val="0"/></w:pPr>'
+ '<w:rPr><w:rFonts w:eastAsiaTheme="majorEastAsia" w:cstheme="majorBidi"/><w:b/><w:caps/><w:szCs w:val="32"/></w:rPr></w:style>')
+sty = sty.replace('</w:styles>', new + unnum + '</w:styles>')
 files['word/styles.xml'] = sty.encode('utf8')
 
 zout = zipfile.ZipFile(dst, 'w', zipfile.ZIP_DEFLATED)
