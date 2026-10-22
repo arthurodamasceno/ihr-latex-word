@@ -1,0 +1,11 @@
+global.katex = require('../vendor/katex.min.js');
+const fs = require('fs');
+const L = require('../lib/latex2ooxml.js');
+const src = fs.readFileSync(process.argv[2], 'utf8');
+const png = fs.readFileSync(process.argv[3] || '/home/claude/ihr-latex/figura-exemplo.png');
+const res = L.convert(src, { images: { 'figura-exemplo': { base64: png.toString('base64'), contentType: 'image/png', width: 520, height: 275 } } });
+console.log('warnings:', res.warnings);
+console.log('blocks:', res.blocks.map(b => b.type + (b.level ? b.level : '') + (b.kind ? ':' + b.kind : '')).join(' '));
+console.log('body length', res.body.length, 'footnotes', res.footnotes.length, 'media', res.media.length, 'nums', res.nums.length);
+fs.writeFileSync('/tmp/claude-0/res.json', JSON.stringify(res));
+fs.writeFileSync('/tmp/claude-0/pkg.xml', L.buildPackage(res));

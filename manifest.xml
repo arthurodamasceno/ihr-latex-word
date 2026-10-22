@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+           xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+           xsi:type="TaskPaneApp">
+  <Id>9bda6c45-f03e-4100-8913-ccba270fcbbc</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Damasceno - ICT IHR</ProviderName>
+  <DefaultLocale>pt-BR</DefaultLocale>
+  <DisplayName DefaultValue="LaTeX IHR"/>
+  <Description DefaultValue="Escreva em LaTeX e insira no Word com os estilos do template de relatório do IHR. Também converte trechos do documento em LaTeX para edição."/>
+  <IconUrl DefaultValue="https://arthurodamasceno.github.io/ihr-latex-word/assets/icon-32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://arthurodamasceno.github.io/ihr-latex-word/assets/icon-64.png"/>
+  <SupportUrl DefaultValue="https://github.com/arthurodamasceno/ihr-latex-word"/>
+  <AppDomains>
+    <AppDomain>https://arthurodamasceno.github.io</AppDomain>
+  </AppDomains>
+  <Hosts>
+    <Host Name="Document"/>
+  </Hosts>
+  <Requirements>
+    <Sets DefaultMinVersion="1.3">
+      <Set Name="WordApi" MinVersion="1.3"/>
+    </Sets>
+  </Requirements>
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://arthurodamasceno.github.io/ihr-latex-word/taskpane.html"/>
+  </DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Document">
+        <DesktopFormFactor>
+          <GetStarted>
+            <Title resid="GetStarted.Title"/>
+            <Description resid="GetStarted.Description"/>
+            <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
+          </GetStarted>
+          <FunctionFile resid="Commands.Url"/>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="IHRLX.Group">
+                <Label resid="Group.Label"/>
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16"/>
+                  <bt:Image size="32" resid="Icon.32"/>
+                  <bt:Image size="80" resid="Icon.80"/>
+                </Icon>
+                <Control xsi:type="Button" id="IHRLX.TaskpaneButton">
+                  <Label resid="Button.Label"/>
+                  <Supertip>
+                    <Title resid="Button.Label"/>
+                    <Description resid="Button.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16"/>
+                    <bt:Image size="32" resid="Icon.32"/>
+                    <bt:Image size="80" resid="Icon.80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>IHRLXPane</TaskpaneId>
+                    <SourceLocation resid="Taskpane.Url"/>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Icon.16" DefaultValue="https://arthurodamasceno.github.io/ihr-latex-word/assets/icon-16.png"/>
+        <bt:Image id="Icon.32" DefaultValue="https://arthurodamasceno.github.io/ihr-latex-word/assets/icon-32.png"/>
+        <bt:Image id="Icon.80" DefaultValue="https://arthurodamasceno.github.io/ihr-latex-word/assets/icon-80.png"/>
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://arthurodamasceno.github.io/ihr-latex-word/taskpane.html"/>
+        <bt:Url id="Commands.Url" DefaultValue="https://arthurodamasceno.github.io/ihr-latex-word/commands.html"/>
+        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://github.com/arthurodamasceno/ihr-latex-word"/>
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="GetStarted.Title" DefaultValue="LaTeX IHR pronto"/>
+        <bt:String id="Group.Label" DefaultValue="LaTeX"/>
+        <bt:String id="Button.Label" DefaultValue="Editor LaTeX"/>
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="GetStarted.Description" DefaultValue="Abra o Editor LaTeX na guia Página Inicial."/>
+        <bt:String id="Button.Tooltip" DefaultValue="Abre o painel para escrever em LaTeX e inserir no documento com os estilos do template IHR."/>
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>
