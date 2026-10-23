@@ -786,6 +786,11 @@
     var n = ++ctx.counters['Equação'];
     var label = '(' + n + ')';
     var num = textRun('(', {}) + field('SEQ Equação \\* ARABIC', String(n), {}) + textRun(')', {});
+    if (ctx.opts.eqChapter) {            // perfil: equações numeradas por capítulo, ex.: (2.1)
+      var ch = String(ctx.chapter || 1);
+      label = '(' + ch + '.' + n + ')';
+      num = textRun('(', {}) + field('STYLEREF 1 \\s', ch, {}) + textRun('.', {}) + field('SEQ Equação \\* ARABIC \\s 1', String(n), {}) + textRun(')', {});
+    }
     if (b.label) { ctx.labelText[b.label] = label; num = bmWrap(bookmarkName(b.label, 'E'), num, ctx); }
     var nob = '<w:tcBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/></w:tcBorders>';
     return '<w:tbl><w:tblPr><w:tblStyle w:val="Tabelacomgrade"/><w:tblW w:w="0" w:type="auto"/>' +
@@ -806,7 +811,7 @@
       var n = ++ctx.counters[seq];
       var num = field('SEQ ' + seq + ' \\* ARABIC', String(n), {});
       if (b.label) { ctx.labelText[b.label] = String(n); num = bmWrap(bookmarkName(b.label, 'N'), num, ctx); }
-      x += para(textRun(seq + ' ', {}) + num + textRun(' - ', {}) + renderInline(parseInline(b.caption, ctx, {}), ctx), pStyle('Legenda'));
+      x += para(textRun(seq + ' ', {}) + num + textRun(ctx.opts.captionSep || ' - ', {}) + renderInline(parseInline(b.caption, ctx, {}), ctx), pStyle('Legenda'));
     }
     b.content.forEach(function (c) {
       if (c.type === 'table') { c.kind = b.kind === 'figure' ? 'grid' : b.kind; x += renderTable(c, ctx); }
@@ -851,7 +856,8 @@
     var items = [];
     keys.forEach(function (k) {
       if (!ctx.bib || !ctx.bib.has(k)) return;
-      var runs = ctx.bib.reference(k).map(function (sg) { return textRun(sg.t, sg.b ? { b: true } : {}); }).join('');
+      var emph = ctx.opts.bibEmph === 'i' ? { i: true } : { b: true };      // perfil: título em negrito (IHR) ou itálico
+      var runs = ctx.bib.reference(k).map(function (sg) { return textRun(sg.t, sg.b ? emph : {}); }).join('');
       items.push({ sort: ctx.bib.sortKey(k), xml: para(bmWrap('_RefB_' + encLabel(k), runs, ctx), pStyle('Bibliografia')) });
     });
     manualSrcs.forEach(function (src) {
@@ -885,6 +891,7 @@
           x += para(renderInline(items, ctx), ppr);
           break;
         case 'heading':
+          if (b.level === 1 && !b.star) { ctx.chapter = (ctx.chapter || ctx.opts.startChapter || 0) + 1; if (ctx.opts.eqChapter) ctx.counters['Equação'] = 0; }
           var inner = renderInline(parseInline(b.src, ctx, {}), ctx);
           if (b.label) { ctx.labelText[b.label] = '?'; inner = bmWrap(bookmarkName(b.label, 'S'), inner, ctx); }
           x += para(inner, b.star && b.level === 1 ? pStyle('TtuloSemNumerao') : pStyle('Ttulo' + b.level) + (b.star ? '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="0"/></w:numPr>' : ''));
@@ -908,7 +915,7 @@
           break;
         case 'cover':
           var cv = b.field === 'date' && /^\\today\s*$/.test(b.src) ? new Date().getFullYear().toString() : b.src;
-          x += para(renderInline(parseInline(cv, ctx, {}), ctx), pStyle(COVER[b.field]) + (b.field === 'local' || b.field === 'date' ? FR_LOC : FR_TIT));
+          x += para(renderInline(parseInline(cv, ctx, {}), ctx), pStyle(COVER[b.field]) + (ctx.opts.coverFrames === false ? '' : (b.field === 'local' || b.field === 'date' ? FR_LOC : FR_TIT)));
           break;
         case 'maketitle':
           ['title', 'subtitulo', 'local', 'date'].forEach(function (f) {

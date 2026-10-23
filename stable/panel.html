@@ -69,4 +69,13 @@
     <p class="hint">Como funciona: selecione um trecho no Word e ele aparece aqui, vinculado. Edite e use <b>Ctrl+Enter</b> para atualizar o trecho. Para escrever algo novo, clique num parágrafo vazio do documento (modo inserção). Na capa (template v4), use <code>\title</code>, <code>\subtitulo</code>, <code>\local</code>, <code>\date</code> e <code>\maketitle</code>. Só os blocos que você altera são reescritos; sumário e quebras de seção (linhas com %) ficam protegidos. Clique num título em <b>Estrutura</b> para abrir aquela seção.</p>
   </details>
 
-  <footer><span id="ver"></span> · estilos do template IHR v4</footer>
+  <details id="tplBox">
+    <summary>Modelo próprio</summary>
+    <p class="hint">Para usar o LaTeX IHR num modelo seu (.dotx ou .docx): abra o modelo, clique abaixo e os estilos que o painel usa
+      (Título sem numeração, Legenda, Fonte, Equações, Imagem, Tabelas, Bibliografia…) são criados com o padrão do IHR.
+      Os que o modelo já tem (Título 1–6, Legenda, Sumário…) não mudam. Depois ajuste os estilos no Word e salve com
+      <i>Arquivo → Salvar como → Modelo do Word (.dotx)</i>.</p>
+    <button id="btnPrep" class="small">Preparar este documento</button>
+    <ul id="tplList"></ul>
+  </details>
+  <footer><span id="ver"></span> · <span id="perfil">perfil: template IHR v4</span></footer>

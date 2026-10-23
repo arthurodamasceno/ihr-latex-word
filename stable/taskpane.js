@@ -245,9 +245,122 @@
     renderMode();
   }
   function convertEditor(kinds, cited) {
-    var res = L.convert(ed.value, { images: S.images, labelKinds: kinds, bib: S.lib, citedKeys: cited || [] });
+    var res = L.convert(ed.value, convOpts({ images: S.images, labelKinds: kinds, bib: S.lib, citedKeys: cited || [] }));
     return { res: res, pkg: L.buildPackage(res) };
   }
+
+  // ------------------------------------------------------- perfil do template
+  // Um .dotx pode trazer um perfil (parte XML personalizada) que ajusta a conversão ao template.
+  var PERFNS = 'urn:ihr-latex-word:perfil';
+  var PERFIL_IHR = { nome: 'template IHR v4', legenda: ' - ', equacaoPorCapitulo: false,
+    referencias: { iniciais: false, destaque: 'negrito' }, capaComQuadros: true };
+  S.profile = PERFIL_IHR;
+  async function loadProfile() {
+    S.profile = PERFIL_IHR;
+    try {
+      var r = await oc(function (cb) { Office.context.document.customXmlParts.getByNamespaceAsync(PERFNS, cb); });
+      if (r.status === 'succeeded' && r.value.length) {
+        var x = await oc(function (cb) { r.value[0].getXmlAsync(cb); });
+        if (x.status === 'succeeded') {
+          var j = JSON.parse(window.IHRLX.xml.text(window.IHRLX.xml.parse(x.value)));
+          S.profile = Object.assign({}, PERFIL_IHR, j, { referencias: Object.assign({}, PERFIL_IHR.referencias, j.referencias || {}) });
+        }
+      }
+    } catch (e) { /* sem perfil: IHR */ }
+    $('perfil').textContent = 'perfil: ' + S.profile.nome;
+    $('perfil').title = S.profile === PERFIL_IHR ? 'Documento sem perfil próprio: usa o padrão do template IHR.' : 'Perfil lido do template deste documento.';
+  }
+  function convOpts(extra) {
+    var P = S.profile;
+    if (S.lib) S.lib.setStyle({ initials: !!P.referencias.iniciais });
+    return Object.assign({ captionSep: P.legenda, eqChapter: !!P.equacaoPorCapitulo,
+      bibEmph: P.referencias.destaque === 'italico' ? 'i' : 'b', coverFrames: P.capaComQuadros !== false }, extra);
+  }
+
+  // ------------------------------------------------------- preparar modelo
+  // Acrescenta ao documento aberto os estilos que o LaTeX IHR usa e que ainda não existem nele.
+  // Os que já existem (pelo nome interno: "heading 1", "caption"...) ficam como estão.
+  var NOME_PT = { 'heading 1': 'Título 1', 'heading 2': 'Título 2', 'heading 3': 'Título 3', 'heading 4': 'Título 4', 'heading 5': 'Título 5',
+    'heading 6': 'Título 6', 'caption': 'Legenda', 'toc heading': 'Cabeçalho do Sumário', 'bibliography': 'Bibliografia',
+    'list paragraph': 'Parágrafo da Lista', 'table grid': 'Tabela com grade', 'plain table 3': 'Tabela Simples 3',
+    'footnote text': 'Texto de nota de rodapé', 'footnote reference': 'Ref. de nota de rodapé', 'hyperlink': 'Hiperlink',
+    'normal': 'Normal', 'normal table': 'Tabela normal', 'default paragraph font': 'Fonte parág. padrão', 'no list': 'Sem lista' };
+  function nomePt(n) { var m = /^toc (\d)$/.exec(n); return m ? 'Sumário ' + m[1] : (NOME_PT[n] || n); }
+  function templateStyles() {
+    var out = [];
+    (window.IHRLX.template.styles.match(/<w:style [\s\S]*?<\/w:style>/g) || []).forEach(function (x) {
+      var id = (/w:styleId="([^"]+)"/.exec(x) || [])[1], nm = ((/<w:name w:val="([^"]+)"/.exec(x) || [])[1] || '').toLowerCase();
+      var ty = (/w:type="([^"]+)"/.exec(x) || [])[1];
+      var dep = []; x.replace(/<w:(?:basedOn|next|link) w:val="([^"]+)"/g, function (m, d) { dep.push(d); });
+      out.push({ id: id, name: nm, type: ty, xml: x, dep: dep });
+    });
+    return out;
+  }
+  async function prepareTemplate() {
+    if (needWord()) return;
+    status('Verificando os estilos do documento…', '');
+    try {
+      var added = [], kept = [];
+      await Word.run(async function (ctx) {
+        var ox = ctx.document.body.paragraphs.getFirst().getRange('Whole').getOoxml();
+        await ctx.sync();
+        var have = {};
+        var tree = window.IHRLX.xml.parse(ox.value);
+        window.IHRLX.xml.find(tree, 'w:style').forEach(function (st) {
+          var nm = window.IHRLX.xml.kid(st, 'w:name');
+          if (nm) have[(window.IHRLX.xml.val(nm) || '').toLowerCase()] = true;
+        });
+        var all = templateStyles(), byId = {};
+        all.forEach(function (t) { byId[t.id] = t; });
+        var need = {};
+        all.forEach(function (t) {
+          if (/^(normal|normal table|default paragraph font|no list)$/.test(t.name) || t.id === 'Referncias') return;
+          if (have[t.name]) { kept.push(nomePt(t.name)); return; }
+          need[t.id] = t;
+        });
+        // dependências (basedOn/next) que também faltam
+        Object.keys(need).forEach(function (id) {
+          need[id].dep.forEach(function (d) { if (byId[d] && !have[byId[d].name] && !need[d] && !/^(normal|normal table|default paragraph font|no list)$/.test(byId[d].name)) need[d] = byId[d]; });
+        });
+        var list = Object.keys(need).map(function (k) { return need[k]; });
+        if (!list.length) return;
+        var defs = list.map(function (t) { return t.xml; }).join('');
+        var body = '';
+        list.filter(function (t) { return t.type === 'table'; }).forEach(function (t) {
+          body += '<w:tbl><w:tblPr><w:tblStyle w:val="' + t.id + '"/><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid>' +
+            '<w:tr><w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr><w:p/></w:tc></w:tr></w:tbl>';
+        });
+        list.filter(function (t) { return t.type === 'paragraph'; }).forEach(function (t) {
+          body += '<w:p><w:pPr><w:pStyle w:val="' + t.id + '"/></w:pPr><w:r><w:t>.</w:t></w:r></w:p>';
+        });
+        var chars = list.filter(function (t) { return t.type === 'character'; });
+        if (chars.length) body += '<w:p>' + chars.map(function (t) { return '<w:r><w:rPr><w:rStyle w:val="' + t.id + '"/></w:rPr><w:t>.</w:t></w:r>'; }).join('') + '</w:p>';
+        var styles = window.IHRLX.template.styles.replace(/(<w:styles[^>]*>)[\s\S]*$/, '$1') +
+          (window.IHRLX.template.styles.match(/<w:docDefaults>[\s\S]*?<\/w:docDefaults>/) || [''])[0] + defs + '</w:styles>';
+        var pkg = L.buildPackage({ body: body, footnotes: [], rels: [], media: [], nums: [] }).replace(/(<pkg:part pkg:name="\/word\/styles\.xml"[^>]*><pkg:xmlData>)[\s\S]*?(<\/pkg:xmlData>)/, function (m, a, b) { return a + styles + b; });
+        var paras = ctx.document.body.paragraphs; paras.load('items');
+        await ctx.sync();
+        var before = paras.items.length;
+        var ins = ctx.document.body.insertOoxml(pkg, 'End');
+        await ctx.sync();
+        ins.delete();
+        await ctx.sync();
+        // o último parágrafo do documento não pode ser apagado: devolve o estilo Normal se sobrou um vazio
+        var ps2 = ctx.document.body.paragraphs; ps2.load('items/text');
+        await ctx.sync();
+        var last = ps2.items[ps2.items.length - 1];
+        if (ps2.items.length > before && !(last.text || '').trim()) { last.styleBuiltIn = Word.Style.normal; await ctx.sync(); }
+        added = list.map(function (t) { return nomePt(t.name); });
+      });
+      var ul = $('tplList'); ul.innerHTML = '';
+      function li(t, cls) { var e = document.createElement('li'); e.textContent = t; e.className = cls; ul.appendChild(e); }
+      added.forEach(function (n) { li('+ ' + n, 'add'); });
+      kept.forEach(function (n) { li('= ' + n, 'keep'); });
+      status(added.length ? added.length + ' estilo(s) do LaTeX IHR acrescentado(s); ' + kept.length + ' já existia(m) e ficaram como estavam. Ajuste-os no Word (Página Inicial → Estilos) e salve como Modelo do Word (.dotx).'
+        : 'Este documento já tem todos os estilos do LaTeX IHR (' + kept.length + ').', 'ok');
+    } catch (e) { status('Não foi possível preparar o documento: ' + errMsg(e), 'err'); }
+  }
+  $('btnPrep').addEventListener('click', prepareTemplate);
 
   // ------------------------------------------------------- referências
   var BIBNS = 'urn:ihr-latex-word:bib';
@@ -316,7 +429,7 @@
     }
     if (h < 0) {
       if (!createIfMissing || !keys.length) return keys.length ? 'Não encontrei o capítulo "Referências" no documento.' : 'Nenhuma citação do .bib no documento.';
-      var res0 = L.convertBibList({ bib: S.lib, keys: keys, manual: [], withHeading: true });
+      var res0 = L.convertBibList(convOpts({ bib: S.lib, keys: keys, manual: [], withHeading: true }));
       ctx.document.body.insertOoxml(L.buildPackage(res0), 'End');
       await ctx.sync();
       return 'Capítulo "Referências" criado no fim do documento com ' + keys.length + ' referência(s).';
@@ -339,7 +452,7 @@
         manual.push(m ? m[1] : t);
       });
     }
-    var res = L.convertBibList({ bib: S.lib, keys: keys, manual: manual });
+    var res = L.convertBibList(convOpts({ bib: S.lib, keys: keys, manual: manual }));
     var pkg = L.buildPackage(res);
     if (list.length) list[0].getRange('Whole').expandTo(list[list.length - 1].getRange('Whole')).insertOoxml(pkg, 'Replace');
     else if (res.body) items[h].insertParagraph('', 'After').insertOoxml(pkg, 'Replace');
@@ -446,7 +559,7 @@
     var miss = [], unsafeHit = false, warnings = [], fields = 0, cites = 0, hasBib = false, blocks = [];
     hunks.forEach(function (h) {
       var tex = newB.slice(h.k0, h.k1).join('\n\n');
-      var res = L.convert(tex, { images: S.images, labelKinds: kinds, bib: S.lib, citedKeys: cited });
+      var res = L.convert(tex, convOpts({ images: S.images, labelKinds: kinds, bib: S.lib, citedKeys: cited }));
       h.pkg = res.body ? L.buildPackage(res) : null;
       miss = miss.concat(res.missingImages);
       res.warnings.forEach(function (w) { if (warnings.indexOf(w) < 0) warnings.push(w); });
@@ -817,6 +930,7 @@
         try {
           Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, scheduleSelCheck);
         } catch (e) { /* sem eventos: segue manual */ }
+        loadProfile();
         loadLibrary();
         refreshOutline();
         // remove um vínculo esquecido de uma sessão anterior
