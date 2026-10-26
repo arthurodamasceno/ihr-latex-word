@@ -188,6 +188,49 @@
     } catch (e) { /* sem marcadores */ }
     return map;
   }
+  // ---- numeração provisória: sem a API de campos (WordApi 1.5) o Word não renumera sozinho,
+  // então o painel conta as legendas/equações que já existem antes do ponto de inserção
+  var SEQKINDS = ['Figura', 'Tabela', 'Quadro', 'Equação'];
+  function countSeq(ooxml) {
+    var instr = (ooxml.match(/<w:instrText[^>]*>[^<]*<\/w:instrText>/g) || []).map(function (x) { return x.replace(/<[^>]+>/g, ''); }).join(' ');
+    var c = {};
+    SEQKINDS.forEach(function (k) { c[k] = (instr.match(new RegExp('SEQ\\s+' + k + '\\b', 'g')) || []).length; });
+    return c;
+  }
+  function countLatex(tex) {
+    var c = { Figura: 0, Tabela: 0, Quadro: 0, 'Equação': 0 };
+    var ENV = { figure: 'Figura', table: 'Tabela', quadro: 'Quadro' };
+    (tex || '').replace(/\\begin\{(figure|table|quadro)\}([\s\S]*?)\\end\{\1\}/g, function (m, e, body) { if (/\\caption\b/.test(body)) c[ENV[e]]++; return ''; });
+    c['Equação'] = (tex.match(/\\begin\{equation\}/g) || []).length;
+    return c;
+  }
+  async function numbersBefore(ctx, point) {
+    try {
+      var r = ctx.document.body.getRange('Start').expandTo(point.getRange('Start'));
+      var ox = r.getOoxml();
+      await ctx.sync();
+      return countSeq(ox.value);
+    } catch (e) { return null; }       // ponto no início do documento
+  }
+  function addCounts(a, b) { var o = {}; SEQKINDS.forEach(function (k) { o[k] = (a && a[k] || 0) + (b && b[k] || 0); }); return o; }
+  // texto atual dos rótulos citados no trecho e definidos fora dele (ex.: "3", "(2)")
+  async function refTexts(ctx, tex, kinds) {
+    var out = {};
+    if (!api('1.4')) return out;
+    var defined = {}; (tex.match(/\\label\{([^}]+)\}/g) || []).forEach(function (m) { defined[m.slice(7, -1)] = 1; });
+    var want = {}; tex.replace(/\\(?:ref|eqref|autoref)\{([^}]+)\}/g, function (m, l) { if (!defined[l]) want[l] = 1; return ''; });
+    var got = Object.keys(want).map(function (l) {
+      var k = kinds[l] || (/^_Ref\d+$/.test(l) ? 'W' : null);
+      if (!k) return null;
+      var r = ctx.document.getBookmarkRangeOrNullObject(k === 'W' ? l : L.bookmarkName(l, k)); r.load('text,isNullObject');
+      return { l: l, r: r };
+    }).filter(Boolean);
+    if (!got.length) return out;
+    try { await ctx.sync(); } catch (e) { return out; }
+    got.forEach(function (g) { if (!g.r.isNullObject && (g.r.text || '').trim()) out[g.l] = g.r.text.trim(); });
+    return out;
+  }
+
   async function updateFields(ctx, res) {
     if (!api('1.5')) return false;
     try {
@@ -244,8 +287,8 @@
     notice('');
     renderMode();
   }
-  function convertEditor(kinds, cited) {
-    var res = L.convert(ed.value, convOpts({ images: S.images, labelKinds: kinds, bib: S.lib, citedKeys: cited || [] }));
+  function convertEditor(kinds, cited, extra) {
+    var res = L.convert(ed.value, convOpts(Object.assign({ images: S.images, labelKinds: kinds, bib: S.lib, citedKeys: cited || [] }, extra || {})));
     return { res: res, pkg: L.buildPackage(res) };
   }
 
@@ -475,7 +518,10 @@
     try {
       await Word.run(async function (ctx) {
         var kinds = await labelKinds(ctx);
-        var c = convertEditor(kinds, await citedKeys(ctx));
+        var sel0 = ctx.document.getSelection();
+        var nums = await numbersBefore(ctx, sel0), rt = await refTexts(ctx, ed.value, kinds);
+        if (nums && S.profile.equacaoPorCapitulo) delete nums['Equação'];      // numeradas por capítulo: o Word recalcula
+        var c = convertEditor(kinds, await citedKeys(ctx), { startNumbers: nums || undefined, labelText: rt });
         var rng = ctx.document.getSelection().insertOoxml(c.pkg, 'Replace');
         await ctx.sync();
         await restyleLast(ctx, rng, c.res.body);
@@ -590,10 +636,12 @@
     var hunks = makeHunks(oldB.length, newB.length, pairs);
     if (!hunks.length) return { changed: 0 };
     var kinds = await labelKinds(ctx), cited = await citedKeys(ctx);
+    var base = S.profile.equacaoPorCapitulo ? null : await numbersBefore(ctx, region), rt = await refTexts(ctx, ed.value, kinds);
     var miss = [], unsafeHit = false, warnings = [], fields = 0, cites = 0, hasBib = false, blocks = [];
     hunks.forEach(function (h) {
       var tex = newB.slice(h.k0, h.k1).join('\n\n');
-      var res = L.convert(tex, convOpts({ images: S.images, labelKinds: kinds, bib: S.lib, citedKeys: cited }));
+      var start = base ? addCounts(base, countLatex(newB.slice(0, h.k0).join('\n\n'))) : undefined;
+      var res = L.convert(tex, convOpts({ images: S.images, labelKinds: kinds, bib: S.lib, citedKeys: cited, startNumbers: start, labelText: rt }));
       h.pkg = res.body ? L.buildPackage(res) : null;
       h.body = res.body;
       miss = miss.concat(res.missingImages);
