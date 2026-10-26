@@ -476,21 +476,9 @@
       await Word.run(async function (ctx) {
         var kinds = await labelKinds(ctx);
         var c = convertEditor(kinds, await citedKeys(ctx));
-        var sel = ctx.document.getSelection(), selP = sel.paragraphs.getFirst();
-        sel.load('isEmpty'); selP.load('text');
+        var rng = ctx.document.getSelection().insertOoxml(c.pkg, 'Replace');
         await ctx.sync();
-        var wasEmpty = sel.isEmpty && !(selP.text || '').trim();
-        // O último parágrafo inserido se funde com o parágrafo do cursor e herda o estilo dele
-        // (ex.: a \fonte de uma tabela virava Normal). Um parágrafo vazio no fim absorve essa fusão.
-        var rng = sel.insertOoxml(c.pkg.replace(/<\/w:body>/, '<w:p/></w:body>'), 'Replace');
-        await ctx.sync();
-        if (wasEmpty) {       // o cursor estava numa linha vazia: remove a linha que sobrou depois do conteúdo
-          try {
-            var left = rng.getRange('After').paragraphs.getFirst(); left.load('text');
-            await ctx.sync();
-            if (!(left.text || '').trim()) { left.delete(); await ctx.sync(); }
-          } catch (e) { /* último parágrafo do documento: fica */ }
-        }
+        await restyleLast(ctx, rng, c.res.body);
         var ok = c.res.fields ? await updateFields(ctx, c.res) : true;
         var bibMsg = c.res.cites && !c.res.hasBib && S.lib && S.lib.count() ? await regenBib(ctx, true) : '';
         if (api('1.4')) await bindTo(ctx, rng, ed.value);
@@ -500,6 +488,39 @@
     } catch (e) {
       status('Não foi possível inserir: ' + errMsg(e), 'err');
     } finally { setBusy(false); }
+  }
+
+  // O último parágrafo inserido se funde com o parágrafo de destino e fica com o estilo dele
+  // (ex.: a \fonte de uma tabela inserida numa linha vazia virava Normal). Reaplica o estilo
+  // e o alinhamento que o conversor gerou para esse parágrafo.
+  var BUILTIN = { 'normal': 'Normal', 'heading 1': 'Heading1', 'heading 2': 'Heading2', 'heading 3': 'Heading3', 'heading 4': 'Heading4',
+    'heading 5': 'Heading5', 'heading 6': 'Heading6', 'caption': 'Caption', 'bibliography': 'Bibliography', 'list paragraph': 'ListParagraph',
+    'toc heading': 'TocHeading', 'footnote text': 'FootnoteText' };
+  var JC = { center: 'Centered', both: 'Justified', left: 'Left', right: 'Right' };
+  function lastParaSpec(body) {
+    if (!body || !/<\/w:p>\s*$/.test(body)) return null;
+    var i = body.lastIndexOf('<w:p>');
+    if (i < 0 || body.indexOf('</w:tbl>', i) >= 0) return null;
+    var p = body.slice(i), ppr = (/^<w:p><w:pPr>([\s\S]*?)<\/w:pPr>/.exec(p) || [])[1] || '';
+    var id = (/<w:pStyle w:val="([^"]+)"/.exec(ppr) || [])[1] || 'Normal';
+    var st = (window.IHRLX.template.styles.match(new RegExp('<w:style [^>]*w:styleId="' + id + '"[\\s\\S]*?<\\/w:style>')) || [''])[0];
+    var name = ((/<w:name w:val="([^"]+)"/.exec(st) || [])[1] || id);
+    var jc = (/<w:jc w:val="([^"]+)"/.exec(ppr) || [])[1];
+    var text = p.replace(/<w:instrText[\s\S]*?<\/w:instrText>/g, '').replace(/<[^>]+>/g, '');
+    return { name: name, builtin: BUILTIN[name.toLowerCase()], jc: jc, text: text };
+  }
+  async function restyleLast(ctx, rng, body) {
+    var sp = lastParaSpec(body);
+    if (!sp || !rng) return;
+    try {
+      var lp = rng.paragraphs.getLast(); lp.load('text,style,styleBuiltIn');
+      await ctx.sync();
+      if (paraKey(lp.text) !== paraKey(sp.text)) return;          // não é o parágrafo esperado: não mexe
+      if (sp.builtin) { if (lp.styleBuiltIn !== sp.builtin) lp.styleBuiltIn = sp.builtin; }
+      else if (lp.style !== sp.name) lp.style = sp.name;
+      if (sp.jc && JC[sp.jc]) lp.alignment = JC[sp.jc];
+      await ctx.sync();
+    } catch (e) { /* estilo inexistente ou API antiga: segue */ }
   }
 
   // ---- diferença por blocos: só os blocos alterados são reescritos no documento
@@ -574,6 +595,7 @@
       var tex = newB.slice(h.k0, h.k1).join('\n\n');
       var res = L.convert(tex, convOpts({ images: S.images, labelKinds: kinds, bib: S.lib, citedKeys: cited }));
       h.pkg = res.body ? L.buildPackage(res) : null;
+      h.body = res.body;
       miss = miss.concat(res.missingImages);
       res.warnings.forEach(function (w) { if (warnings.indexOf(w) < 0) warnings.push(w); });
       fields += res.fields; cites += res.cites; hasBib = hasBib || res.hasBib; blocks = blocks.concat(res.blocks);
@@ -605,6 +627,7 @@
       }
     }
     await ctx.sync();
+    for (var y = 0; y < hunks.length; y++) if (inserted[y]) await restyleLast(ctx, inserted[y], hunks[y].body);
     // novo intervalo do trecho: primeira e última peça que sobraram/entraram
     var pieces = [], used = {};
     var replacedAt = {}, afterIdx = {};
