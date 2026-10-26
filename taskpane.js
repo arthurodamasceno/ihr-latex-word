@@ -511,7 +511,7 @@
   // ------------------------------------------------------- ações
   function primary() { return S.bound ? updateBound(false) : insertAtCursor(); }
 
-  async function insertAtCursor() {
+  async function insertAtCursor(force) {
     if (needWord()) return;
     if (!ed.value.trim()) { status('O editor está vazio.', 'warn'); return; }
     setBusy(true); status('Convertendo…');
@@ -522,6 +522,13 @@
         var nums = await numbersBefore(ctx, sel0), rt = await refTexts(ctx, ed.value, kinds);
         if (nums && S.profile.equacaoPorCapitulo) delete nums['Equação'];      // numeradas por capítulo: o Word recalcula
         var c = convertEditor(kinds, await citedKeys(ctx), { startNumbers: nums || undefined, labelText: rt });
+        if (!force && c.res.missingImages.length) {
+          var miss = c.res.missingImages.filter(function (v, i, a) { return a.indexOf(v) === i; });
+          notice('Faltam no painel as imagens ' + miss.join(', ') + '. Carregue-as em "Imagens" e insira de novo; ' +
+            'se inserir assim, entra um marcador [imagem: …] no lugar (ele volta a ser \\includegraphics quando o trecho for lido).',
+            [{ label: 'Inserir mesmo assim', run: function () { notice(''); insertAtCursor(true); } }]);
+          $('imgBox').open = true; status(''); return;
+        }
         var rng = ctx.document.getSelection().insertOoxml(c.pkg, 'Replace');
         await ctx.sync();
         await restyleLast(ctx, rng, c.res.body);
