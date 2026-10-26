@@ -476,8 +476,21 @@
       await Word.run(async function (ctx) {
         var kinds = await labelKinds(ctx);
         var c = convertEditor(kinds, await citedKeys(ctx));
-        var rng = ctx.document.getSelection().insertOoxml(c.pkg, 'Replace');
+        var sel = ctx.document.getSelection(), selP = sel.paragraphs.getFirst();
+        sel.load('isEmpty'); selP.load('text');
         await ctx.sync();
+        var wasEmpty = sel.isEmpty && !(selP.text || '').trim();
+        // O último parágrafo inserido se funde com o parágrafo do cursor e herda o estilo dele
+        // (ex.: a \fonte de uma tabela virava Normal). Um parágrafo vazio no fim absorve essa fusão.
+        var rng = sel.insertOoxml(c.pkg.replace(/<\/w:body>/, '<w:p/></w:body>'), 'Replace');
+        await ctx.sync();
+        if (wasEmpty) {       // o cursor estava numa linha vazia: remove a linha que sobrou depois do conteúdo
+          try {
+            var left = rng.getRange('After').paragraphs.getFirst(); left.load('text');
+            await ctx.sync();
+            if (!(left.text || '').trim()) { left.delete(); await ctx.sync(); }
+          } catch (e) { /* último parágrafo do documento: fica */ }
+        }
         var ok = c.res.fields ? await updateFields(ctx, c.res) : true;
         var bibMsg = c.res.cites && !c.res.hasBib && S.lib && S.lib.count() ? await regenBib(ctx, true) : '';
         if (api('1.4')) await bindTo(ctx, rng, ed.value);
