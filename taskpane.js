@@ -260,7 +260,7 @@
     var c = { Figura: 0, Tabela: 0, Quadro: 0, 'Equação': 0 };
     var ENV = { figure: 'Figura', table: 'Tabela', quadro: 'Quadro' };
     (tex || '').replace(/\\begin\{(figure|table|quadro)\}([\s\S]*?)\\end\{\1\}/g, function (m, e, body) { if (/\\caption\b/.test(body)) c[ENV[e]]++; return ''; });
-    c['Equação'] = (tex.match(/\\begin\{equation\}/g) || []).length;
+    c['Equação'] = (tex.match(/\\begin\{(equation|align|gather|multline|eqnarray|flalign)\}/g) || []).length;
     return c;
   }
   async function numbersBefore(ctx, point) {
