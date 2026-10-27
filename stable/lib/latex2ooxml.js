@@ -344,11 +344,11 @@
   function textRun(t, f, extra) {
     return '<w:r>' + rPr(f, extra) + '<w:t xml:space="preserve">' + esc(t) + '</w:t></w:r>';
   }
-  function field(instr, result, f, extra) {
+  function field(instr, result, f, extra, resultXml) {
     return '<w:r>' + rPr(f, extra) + '<w:fldChar w:fldCharType="begin"/></w:r>' +
       '<w:r>' + rPr(f, extra) + '<w:instrText xml:space="preserve"> ' + esc(instr) + ' </w:instrText></w:r>' +
       '<w:r>' + rPr(f, extra) + '<w:fldChar w:fldCharType="separate"/></w:r>' +
-      textRun(result, f, Object.assign({}, extra || {}, { noProof: true })) +
+      (resultXml || textRun(result, f, Object.assign({}, extra || {}, { noProof: true }))) +
       '<w:r>' + rPr(f, extra) + '<w:fldChar w:fldCharType="end"/></w:r>';
   }
 
@@ -393,9 +393,10 @@
         case 'image': x += imageRun(it, ctx); break;
         case 'cite':
           var txt;
+          var segs = null;
           if (ctx.bib) {
             var cr = ctx.bib.cite(it.keys, it.mode, it.pre, it.post);
-            txt = cr.text;
+            txt = cr.text; segs = cr.segs;
             if (cr.missing.length) ctx.warn('Chave(s) sem referência no .bib: ' + cr.missing.join(', ') + '.');
           } else {
             txt = '(' + it.keys.join('; ') + ')';
@@ -404,7 +405,12 @@
           var info = { m: it.mode, k: it.keys };
           if (it.pre) info.pre = it.pre;
           if (it.post) info.post = it.post;
-          x += field('ADDIN IHRCITE ' + JSON.stringify(info), txt, it.fmt, extra);
+          // resultado do campo: cada autor/ano é um link (Ctrl+clique) para a sua entrada em Referências
+          var resXml = segs ? segs.map(function (g) {
+            var r = textRun(g.t, it.fmt, Object.assign({}, extra || {}, { noProof: true }));
+            return g.k ? '<w:hyperlink w:anchor="' + esc('_RefB_' + encLabel(g.k)) + '" w:history="1">' + r + '</w:hyperlink>' : r;
+          }).join('') : null;
+          x += field('ADDIN IHRCITE ' + JSON.stringify(info), txt, it.fmt, extra, resXml);
           ctx.cites++;
           break;
       }
