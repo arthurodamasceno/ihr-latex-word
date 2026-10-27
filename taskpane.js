@@ -94,7 +94,7 @@
 
   // --------------------------------------------------------- rascunho/opções
   try {
-    var d = localStorage.getItem('ihrlx.draft'); if (d) ed.value = d;
+    var d = localStorage.getItem('ihrlx.draft'); if (d) { ed.value = d; }
     var a = localStorage.getItem('ihrlx.auto'); if (a !== null) S.auto = a === '1';
   } catch (e) { /* sem armazenamento */ }
   $('autoRead').checked = S.auto;
@@ -117,8 +117,47 @@
       e.preventDefault(); primary();
     }
   });
+  // ---- realce: camada <pre> atrás do textarea transparente (comandos, comentários e $)
+  var hlEl = $('edHL'), hlPending = false;
+  function escH(t) { return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function highlight(t) {
+    var re = /\\(?:begin|end)\{[^}\n]*\}|\\(?:[A-Za-z@]+\*?|[^A-Za-z\n])|%[^\n]*|\$\$?/g, out = '', last = 0, m;
+    while ((m = re.exec(t))) {
+      out += escH(t.slice(last, m.index));
+      var tok = m[0], cls = tok[0] === '%' ? 'k' : tok[0] === '$' ? 'm' : 'c';
+      out += '<span class="' + cls + '">' + escH(tok) + '</span>';
+      last = m.index + tok.length;
+    }
+    return out + escH(t.slice(last)) + '\n ';
+  }
+  function syncHL() {
+    if (hlPending) return; hlPending = true;
+    requestAnimationFrame(function () { hlPending = false; hlEl.innerHTML = highlight(ed.value); hlEl.scrollTop = ed.scrollTop; hlEl.scrollLeft = ed.scrollLeft; });
+  }
+  ed.addEventListener('input', syncHL);
+  ed.addEventListener('scroll', function () { hlEl.scrollTop = ed.scrollTop; hlEl.scrollLeft = ed.scrollLeft; });
+  var wrapOn = true;
+  try { wrapOn = localStorage.getItem('ihrlx.wrap') !== '0'; } catch (e) { /* padrão: quebra */ }
+  function applyWrap() {
+    $('edWrap').classList.toggle('wrap', wrapOn); ed.wrap = wrapOn ? 'soft' : 'off';
+    $('btnWrap').classList.toggle('on', wrapOn); syncHL();
+  }
+  $('btnWrap').addEventListener('click', function () {
+    wrapOn = !wrapOn; try { localStorage.setItem('ihrlx.wrap', wrapOn ? '1' : '0'); } catch (e) { /* ignora */ }
+    applyWrap(); ed.focus();
+  });
+  function setMax(on) {
+    document.body.classList.toggle('max', on); $('btnMax').classList.toggle('on', on);
+    $('btnMax').textContent = on ? '⤡' : '⤢'; $('btnMax').title = on ? 'Voltar ao painel completo (Esc)' : 'Maximizar o editor (Esc volta)';
+    syncHL();
+  }
+  $('btnMax').addEventListener('click', function () { setMax(!document.body.classList.contains('max')); ed.focus(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && document.body.classList.contains('max')) setMax(false); });
+  if (window.ResizeObserver) new ResizeObserver(syncHL).observe($('edWrap'));
+  applyWrap();
+
   function setEditor(text) {
-    ed.value = text;
+    ed.value = text; syncHL();
     try { localStorage.setItem('ihrlx.draft', text); } catch (e) { /* ignora */ }
     renderMode();
   }
@@ -135,8 +174,28 @@
       var nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = n; nm.title = n + ' (' + im.width + '×' + im.height + ' px)';
       var bt = document.createElement('button'); bt.textContent = '×'; bt.title = 'Remover';
       bt.onclick = function () { delete S.images[n]; renderImages(); };
+      th.title = nm.title + ' · clique para inserir no editor';
+      th.onclick = nm.onclick = function () { insertFigure(n); };
       li.appendChild(th); li.appendChild(nm); li.appendChild(bt); ul.appendChild(li);
     });
+  }
+  function insertFigure(n) {
+    var im = S.images[n], base = n.replace(/\.[a-z0-9]+$/i, '');
+    var wcm = Math.min(14, Math.round(((im.width || 600) / 96 * 2.54) * 2) / 2);
+    var inc = '\\includegraphics[width=' + String(wcm).replace('.', ',').replace(',', '.') + 'cm]{' + base + '}';
+    var s0 = ed.selectionStart, before = ed.value.slice(0, s0);
+    var insideFig = before.lastIndexOf('\\begin{figure}') > before.lastIndexOf('\\end{figure}');
+    if (insideFig) { ed.setRangeText(inc, s0, ed.selectionEnd, 'end'); }
+    else {
+      var lbl = 'fig:' + base.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
+      var pre = !before || /\n\n$/.test(before) ? '' : (/\n$/.test(before) ? '\n' : '\n\n');
+      var head = pre + '\\begin{figure}\n  \\caption{';
+      var tail = '}\\label{' + lbl + '}\n  ' + inc + '\n  \\fonte{IHR, ' + new Date().getFullYear() + '.}\n\\end{figure}\n';
+      ed.setRangeText(head + tail, s0, ed.selectionEnd, 'end');
+      var cap = s0 + head.length; ed.setSelectionRange(cap, cap);       // cursor dentro do \caption{}
+    }
+    ed.focus(); ed.dispatchEvent(new Event('input'));
+    status('Figura "' + base + '" inserida no editor. Escreva a legenda e aplique.', 'ok');
   }
   $('imgInput').addEventListener('change', function (ev) {
     Array.prototype.slice.call(ev.target.files || []).forEach(function (f) {
@@ -288,7 +347,7 @@
     renderMode();
   }
   function convertEditor(kinds, cited, extra) {
-    var res = L.convert(ed.value, convOpts(Object.assign({ images: S.images, labelKinds: kinds, bib: S.lib, citedKeys: cited || [] }, extra || {})));
+    var res = L.convert(MAC.prepare(ed.value, S.preamble).text, convOpts(Object.assign({ images: S.images, labelKinds: kinds, bib: S.lib, citedKeys: cited || [] }, extra || {})));
     return { res: res, pkg: L.buildPackage(res) };
   }
 
@@ -404,6 +463,56 @@
     } catch (e) { status('Não foi possível preparar o documento: ' + errMsg(e), 'err'); }
   }
   $('btnPrep').addEventListener('click', prepareTemplate);
+
+  // ------------------------------------------------------- pacotes e comandos
+  var MAC = window.IHRLX.macros, PRENS = 'urn:ihr-latex-word:preambulo';
+  S.preamble = '';
+  var PKGMSG = { nativo: 'já suportado', emulado: 'emulado', layout: 'ignorado: a formatação vem do modelo do Word', nao: 'não suportado: mande o nome do pacote para incluirmos' };
+  function renderPreamble() {
+    var src = $('preText').value, p = MAC.parseDefs(src), ul = $('preList'); ul.innerHTML = '';
+    var nDefs = Object.keys(p.defs).length;
+    $('preCount').textContent = p.packages.length + nDefs;
+    p.packages.forEach(function (pk) {
+      var k = MAC.classify(pk.name), li = document.createElement('li');
+      li.className = k;
+      var extra = k === 'emulado' ? ' (' + Object.keys(MAC.EMULADO[pk.name]).slice(0, 6).map(function (c) { return '\\' + c; }).join(', ') + '…)' : '';
+      li.textContent = (k === 'nao' ? '✗ ' : k === 'layout' ? '– ' : '✓ ') + pk.name + ': ' + PKGMSG[k] + extra;
+      ul.appendChild(li);
+    });
+    if (nDefs) { var li2 = document.createElement('li'); li2.className = 'nativo'; li2.textContent = '✓ ' + nDefs + ' comando(s) definido(s): ' + Object.keys(p.defs).map(function (c) { return '\\' + c; }).join(', '); ul.appendChild(li2); }
+  }
+  async function loadPreamble() {
+    try {
+      var r = await oc(function (cb) { Office.context.document.customXmlParts.getByNamespaceAsync(PRENS, cb); });
+      if (r.status === 'succeeded' && r.value.length) {
+        var x = await oc(function (cb) { r.value[0].getXmlAsync(cb); });
+        if (x.status === 'succeeded') S.preamble = window.IHRLX.xml.text(window.IHRLX.xml.parse(x.value));
+      }
+    } catch (e) { /* sem preâmbulo */ }
+    $('preText').value = S.preamble; renderPreamble();
+  }
+  async function savePreamble() {
+    S.preamble = $('preText').value;
+    var xml = '<preambulo xmlns="' + PRENS + '">' + window.IHRLX.xml.esc(S.preamble) + '</preambulo>';
+    var r = await oc(function (cb) { Office.context.document.customXmlParts.getByNamespaceAsync(PRENS, cb); });
+    if (r.status === 'succeeded') for (var i = 0; i < r.value.length; i++) await oc(function (cb) { r.value[i].deleteAsync(cb); });
+    if (S.preamble.trim()) {
+      var a = await oc(function (cb) { Office.context.document.customXmlParts.addAsync(xml, cb); });
+      if (a.status !== 'succeeded') throw new Error('não foi possível guardar no documento');
+    }
+  }
+  var preT = null;
+  $('preText').addEventListener('input', function () { clearTimeout(preT); preT = setTimeout(renderPreamble, 300); });
+  $('btnPreSave').addEventListener('click', async function () {
+    S.preamble = $('preText').value; renderPreamble();
+    try {
+      if (typeof Office !== 'undefined' && Office.context && Office.context.document) await savePreamble();
+      status('Pacotes e comandos salvos no documento: valem para todo o texto do painel.', 'ok');
+    } catch (e) { status('Salvo só no painel (não consegui gravar no documento): ' + errMsg(e), 'warn'); }
+  });
+  // texto do editor (ou de um bloco) com os comandos expandidos
+  function editorDefs() { return MAC.prepare(ed.value, S.preamble).defs; }
+  function expandTex(tex, defs) { return MAC.expand(MAC.parseDefs(tex).rest, defs || editorDefs()); }
 
   // ------------------------------------------------------- referências
   var BIBNS = 'urn:ihr-latex-word:bib';
@@ -644,11 +753,12 @@
     if (!hunks.length) return { changed: 0 };
     var kinds = await labelKinds(ctx), cited = await citedKeys(ctx);
     var base = S.profile.equacaoPorCapitulo ? null : await numbersBefore(ctx, region), rt = await refTexts(ctx, ed.value, kinds);
+    var defsAll = editorDefs();
     var miss = [], unsafeHit = false, warnings = [], fields = 0, cites = 0, hasBib = false, blocks = [];
     hunks.forEach(function (h) {
       var tex = newB.slice(h.k0, h.k1).join('\n\n');
       var start = base ? addCounts(base, countLatex(newB.slice(0, h.k0).join('\n\n'))) : undefined;
-      var res = L.convert(tex, convOpts({ images: S.images, labelKinds: kinds, bib: S.lib, citedKeys: cited, startNumbers: start, labelText: rt }));
+      var res = L.convert(expandTex(tex, defsAll), convOpts({ images: S.images, labelKinds: kinds, bib: S.lib, citedKeys: cited, startNumbers: start, labelText: rt }));
       h.pkg = res.body ? L.buildPackage(res) : null;
       h.body = res.body;
       miss = miss.concat(res.missingImages);
@@ -985,6 +1095,18 @@
   $('btnOutline').addEventListener('click', refreshOutline);
 
   // ------------------------------------------------------- botões
+  $('btnBibAdd').addEventListener('click', async function () {
+    var txt = $('bibPaste').value.trim();
+    if (!txt) { status('Cole uma entrada BibTeX na caixa (começando com @article{…, @book{… etc.).', 'warn'); return; }
+    if (!S.lib) S.lib = new BIB.Library('');
+    var m = S.lib.merge(txt);
+    if (!m.added && !m.updated) { status('Não reconheci nenhuma entrada BibTeX no texto colado. Confira se começa com @tipo{chave, e se as chaves { } fecham.', 'warn'); return; }
+    $('bibPaste').value = ''; renderBib(); $('bibBox').open = true;
+    try {
+      if (typeof Office !== 'undefined' && Office.context && Office.context.document) await saveLibrary();
+      status(m.added + ' entrada(s) nova(s), ' + m.updated + ' atualizada(s). Clique numa entrada da lista para inserir a citação.', 'ok');
+    } catch (e) { status('Entradas adicionadas no painel, mas não consegui guardá-las no documento: ' + errMsg(e), 'warn'); }
+  });
   $('bibInput').addEventListener('change', function (ev) {
     var f = (ev.target.files || [])[0]; ev.target.value = '';
     if (!f) return;
@@ -1023,6 +1145,7 @@
         } catch (e) { /* sem eventos: segue manual */ }
         loadProfile();
         loadLibrary();
+        loadPreamble();
         refreshOutline();
         // remove um vínculo esquecido de uma sessão anterior
         Word.run(async function (ctx) { ctx.document.deleteBookmark(BM); await ctx.sync(); }).catch(function () {});
@@ -1032,4 +1155,5 @@
   $('ver').textContent = 'v' + VERSION + (/\/stable\//.test(location.pathname) ? '' : ' · canal de teste');
   renderImages();
   renderMode();
+  syncHL();
 })();
