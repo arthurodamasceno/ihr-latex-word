@@ -114,7 +114,7 @@
       e.preventDefault();
       ed.setRangeText('  ', ed.selectionStart, ed.selectionEnd, 'end');
     } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault(); primary();
+      e.preventDefault(); primary(e);
     }
   });
   // ---- realce: camada <pre> atrás do textarea transparente (comandos, comentários e $)
@@ -155,6 +155,139 @@
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && document.body.classList.contains('max')) setMax(false); });
   if (window.ResizeObserver) new ResizeObserver(syncHL).observe($('edWrap'));
   applyWrap();
+  // ---- autocompletar: "\" + letras sugere comandos; dentro de \ref{ / \cite{ sugere rótulos e referências
+  // modelo: | marca onde o cursor fica depois de inserir
+  var CMDS = [
+    ['chapter', '\\chapter{|}', 'Título 1'], ['chapter*', '\\chapter*{|}', 'título sem número'], ['section', '\\section{|}', 'Título 2'],
+    ['subsection', '\\subsection{|}', 'Título 3'], ['subsubsection', '\\subsubsection{|}', 'Título 4'], ['paragraph', '\\paragraph{|}', 'Título 5'],
+    ['subparagraph', '\\subparagraph{|}', 'Título 6'], ['textbf', '\\textbf{|}', 'negrito'], ['textit', '\\textit{|}', 'itálico'], ['emph', '\\emph{|}', 'ênfase'],
+    ['underline', '\\underline{|}', 'sublinhado'], ['texttt', '\\texttt{|}', 'monoespaçado'], ['textsuperscript', '\\textsuperscript{|}', 'sobrescrito'],
+    ['textsubscript', '\\textsubscript{|}', 'subscrito'], ['footnote', '\\footnote{|}', 'nota de rodapé'], ['url', '\\url{|}', 'link'], ['href', '\\href{|}{}', 'link com texto'],
+    ['cite', '\\cite{|}', 'citação (AUTOR, ano)'], ['textcite', '\\textcite{|}', 'citação Autor (ano)'], ['citeauthor', '\\citeauthor{|}', 'só o autor'], ['citeyear', '\\citeyear{|}', 'só o ano'],
+    ['ref', '\\ref{|}', 'número do rótulo'], ['eqref', '\\eqref{|}', 'número da equação (n)'], ['pageref', '\\pageref{|}', 'página do rótulo'], ['label', '\\label{|}', 'rótulo'],
+    ['caption', '\\caption{|}', 'legenda'], ['fonte', '\\fonte{|}', 'fonte da figura/tabela'], ['includegraphics', '\\includegraphics[width=14cm]{|}', 'imagem'],
+    ['item', '\\item |', 'item de lista'], ['newpage', '\\newpage', 'quebra de página'], ['tableofcontents', '\\tableofcontents', 'sumário'],
+    ['printbibliography', '\\printbibliography', 'capítulo Referências'], ['refmanual', '\\refmanual{|}', 'referência digitada à mão'],
+    ['hline', '\\hline', 'linha da tabela'], ['multicolumn', '\\multicolumn{|}{c}{}', 'mesclar colunas'], ['cab', '\\cab{|}', 'cabeçalho da tabela IHR'],
+    ['linhaihr', '\\linhaihr', 'linha do cabeçalho IHR'], ['newcommand', '\\newcommand{\\|}{}', 'novo comando'], ['DeclareMathOperator', '\\DeclareMathOperator{\\|}{}', 'novo operador'],
+    ['begin', '\\begin{|}', 'ambiente'], ['end', '\\end{|}', 'fim de ambiente'],
+    ['begin{equation}', '\\begin{equation}\n  |\n  \\label{eq:}\n\\end{equation}', 'equação numerada'],
+    ['begin{align}', '\\begin{align}\n  | &= \\\\\n  &= \n\\end{align}', 'equações alinhadas'],
+    ['begin{figure}', '\\begin{figure}\n  \\caption{|}\\label{fig:}\n  \\includegraphics[width=14cm]{}\n  \\fonte{IHR, ' + new Date().getFullYear() + '.}\n\\end{figure}', 'figura'],
+    ['begin{table}', '\\begin{table}\n  \\caption{|}\\label{tab:}\n  \\rowcolors{2}{white}{ihrcinza}\n  \\begin{tabular}{Nc}\n    \\multicolumn{1}{l}{\\cab{Coluna 1}} & \\cab{Coluna 2} \\\\ \\linhaihr\n    a & b \\\\\n  \\end{tabular}\n  \\fonte{IHR, ' + new Date().getFullYear() + '.}\n\\end{table}', 'tabela IHR'],
+    ['begin{quadro}', '\\begin{quadro}\n  \\caption{|}\\label{qua:}\n  \\begin{tabular}{|c|c|}\n    \\hline\n    a & b \\\\ \\hline\n  \\end{tabular}\n  \\fonte{IHR, ' + new Date().getFullYear() + '.}\n\\end{quadro}', 'quadro com grade'],
+    ['begin{itemize}', '\\begin{itemize}\n  \\item |\n\\end{itemize}', 'lista com marcadores'], ['begin{enumerate}', '\\begin{enumerate}\n  \\item |\n\\end{enumerate}', 'lista numerada'],
+    ['begin{tabular}', '\\begin{tabular}{|}\n  \n\\end{tabular}', 'tabela simples'], ['begin{cases}', '\\begin{cases}\n  | & \\text{se } \\\\\n  & \\text{caso contrário}\n\\end{cases}', 'casos (em fórmula)'],
+    ['begin{bmatrix}', '\\begin{bmatrix}\n  | & \\\\\n  & \n\\end{bmatrix}', 'matriz [ ]'], ['begin{pmatrix}', '\\begin{pmatrix}\n  | & \\\\\n  & \n\\end{pmatrix}', 'matriz ( )'],
+    ['begin{aligned}', '\\begin{aligned}\n  | &= \\\\\n  &= \n\\end{aligned}', 'alinhado (dentro de equação)'], ['begin{center}', '\\begin{center}\n  |\n\\end{center}', 'centralizado'],
+    ['frac', '\\frac{|}{}', 'fração'], ['dfrac', '\\dfrac{|}{}', 'fração grande'], ['sqrt', '\\sqrt{|}', 'raiz'], ['sum', '\\sum_{|}^{}', 'somatório'], ['prod', '\\prod_{|}^{}', 'produtório'],
+    ['int', '\\int_{|}^{}', 'integral'], ['iint', '\\iint', 'integral dupla'], ['oint', '\\oint', 'integral fechada'], ['lim', '\\lim_{|}', 'limite'],
+    ['left(', '\\left( | \\right)', 'parênteses ajustáveis'], ['left[', '\\left[ | \\right]', 'colchetes ajustáveis'], ['left\\{', '\\left\\{ | \\right\\}', 'chaves ajustáveis'],
+    ['mathbf', '\\mathbf{|}', 'negrito (fórmula)'], ['boldsymbol', '\\boldsymbol{|}', 'negrito itálico'], ['mathrm', '\\mathrm{|}', 'reto'], ['mathbb', '\\mathbb{|}', 'duplo (ℝ)'],
+    ['mathcal', '\\mathcal{|}', 'caligráfico'], ['mathfrak', '\\mathfrak{|}', 'fraktur'], ['operatorname', '\\operatorname{|}', 'operador'], ['text', '\\text{|}', 'texto na fórmula'],
+    ['hat', '\\hat{|}', 'chapéu'], ['bar', '\\bar{|}', 'barra'], ['vec', '\\vec{|}', 'vetor'], ['dot', '\\dot{|}', 'derivada'], ['ddot', '\\ddot{|}', '2ª derivada'],
+    ['tilde', '\\tilde{|}', 'til'], ['overline', '\\overline{|}', 'sobrelinha'], ['partial', '\\partial', '∂'], ['nabla', '\\nabla', '∇'], ['infty', '\\infty', '∞'],
+    ['cdot', '\\cdot', '·'], ['times', '\\times', '×'], ['div', '\\div', '÷'], ['pm', '\\pm', '±'], ['mp', '\\mp', '∓'], ['leq', '\\leq', '≤'], ['geq', '\\geq', '≥'],
+    ['neq', '\\neq', '≠'], ['approx', '\\approx', '≈'], ['equiv', '\\equiv', '≡'], ['sim', '\\sim', '∼'], ['propto', '\\propto', '∝'], ['in', '\\in', '∈'], ['notin', '\\notin', '∉'],
+    ['subset', '\\subset', '⊂'], ['subseteq', '\\subseteq', '⊆'], ['cup', '\\cup', '∪'], ['cap', '\\cap', '∩'], ['forall', '\\forall', '∀'], ['exists', '\\exists', '∃'],
+    ['rightarrow', '\\rightarrow', '→'], ['leftarrow', '\\leftarrow', '←'], ['Rightarrow', '\\Rightarrow', '⇒'], ['Leftrightarrow', '\\Leftrightarrow', '⇔'], ['to', '\\to', '→'],
+    ['mapsto', '\\mapsto', '↦'], ['ldots', '\\ldots', '…'], ['cdots', '\\cdots', '⋯'], ['vdots', '\\vdots', '⋮'], ['ddots', '\\ddots', '⋱'], ['circ', '\\circ', '∘'],
+    ['sin', '\\sin', 'seno'], ['cos', '\\cos', 'cosseno'], ['tan', '\\tan', 'tangente'], ['log', '\\log', 'log'], ['ln', '\\ln', 'ln'], ['exp', '\\exp', 'exp'],
+    ['max', '\\max', 'máx'], ['min', '\\min', 'mín'], ['det', '\\det', 'det'], ['quad', '\\quad', 'espaço'], ['qquad', '\\qquad', 'espaço duplo']
+  ];
+  'alpha beta gamma delta epsilon varepsilon zeta eta theta vartheta iota kappa lambda mu nu xi pi rho sigma tau upsilon phi varphi chi psi omega Gamma Delta Theta Lambda Xi Pi Sigma Phi Psi Omega'
+    .split(' ').forEach(function (g) { CMDS.push([g, '\\' + g, 'letra grega']); });
+  var acBox = document.createElement('ul'); acBox.id = 'acBox'; acBox.className = 'hidden'; $('edWrap').appendChild(acBox);
+  var AC = { items: [], sel: 0, from: 0, open: false };
+  function acClose() { AC.open = false; acBox.classList.add('hidden'); }
+  function acContext() {
+    var pos = ed.selectionStart, before = ed.value.slice(Math.max(0, pos - 200), pos);
+    var m = /\\(ref|eqref|pageref|autoref)\{([^}\n]*)$/.exec(before);
+    if (m) return { kind: 'label', q: m[2], from: pos - m[2].length };
+    m = /\\(cite|textcite|citeonline|citeauthor|citeyear|nocite)(?:\[[^\]\n]*\])*\{(?:[^}\n]*,)?\s*([^},\n]*)$/.exec(before);
+    if (m) return { kind: 'cite', q: m[2], from: pos - m[2].length };
+    m = /\\([A-Za-z@]*(?:\{[A-Za-z*]*)?)$/.exec(before);
+    if (m && ed.selectionStart === ed.selectionEnd) return { kind: 'cmd', q: m[1], from: pos - m[1].length - 1 };
+    return null;
+  }
+  function acCandidates(c) {
+    var q = c.q, ql = q.toLowerCase(), out = [];
+    function rank(name) { return name.indexOf(q) === 0 ? 0 : name.toLowerCase().indexOf(ql) === 0 ? 1 : name.toLowerCase().indexOf(ql) > 0 ? 2 : 9; }
+    if (c.kind === 'cmd') {
+      if (!q) return [];
+      var user = [];
+      try { user = Object.keys(editorDefs()).map(function (k) { return [k, '\\' + k, 'comando seu / pacote']; }); } catch (e) { /* sem definições */ }
+      CMDS.concat(user).forEach(function (it) { var r = rank(it[0]); if (r < 9 && it[0] !== q) out.push({ r: r, label: '\\' + it[0], tpl: it[1], hint: it[2] }); });
+    } else if (c.kind === 'label') {
+      var seen = {};
+      (ed.value.match(/\\label\{([^}]+)\}/g) || []).map(function (x) { return x.slice(7, -1); }).concat(Object.keys(S.docLabels || {})).forEach(function (l) {
+        if (seen[l]) return; seen[l] = 1; var r = q ? rank(l) : 0; if (r < 9) out.push({ r: r, label: l, tpl: l + '|', hint: 'rótulo' });
+      });
+    } else if (c.kind === 'cite' && S.lib) {
+      S.lib.order.forEach(function (k) {
+        var r = q ? Math.min(rank(k), BIB.sortKey(S.lib.label(k)).indexOf(BIB.sortKey(q)) >= 0 ? 2 : 9) : 0;
+        if (r < 9) out.push({ r: r, label: k, tpl: k + '|', hint: S.lib.label(k) });
+      });
+    }
+    out.sort(function (a, b) { return a.r - b.r || a.label.length - b.label.length; });
+    return out.slice(0, 8);
+  }
+  function caretXY() {
+    // mede a posição do cursor pela camada de realce (mesmo layout do textarea)
+    var pos = ed.selectionStart;
+    hlEl.innerHTML = escH(ed.value.slice(0, pos)) + '<span id="acMark">\u200b</span>' + escH(ed.value.slice(pos)) + '\n ';
+    var mk = $('acMark'), xy = { x: mk.offsetLeft - ed.scrollLeft, y: mk.offsetTop - ed.scrollTop, h: mk.offsetHeight || 18 };
+    syncHL();
+    return xy;
+  }
+  function acRender() {
+    acBox.innerHTML = '';
+    AC.items.forEach(function (it, i) {
+      var li = document.createElement('li'); if (i === AC.sel) li.className = 'sel';
+      var a = document.createElement('code'); a.textContent = it.label; var b = document.createElement('span'); b.textContent = it.hint;
+      li.appendChild(a); li.appendChild(b);
+      li.onmousedown = function (ev) { ev.preventDefault(); AC.sel = i; acAccept(); };
+      acBox.appendChild(li);
+    });
+  }
+  function acUpdate() {
+    var c = acContext();
+    if (!c) return acClose();
+    AC.items = acCandidates(c); AC.sel = 0; AC.from = c.from; AC.kind = c.kind;
+    if (!AC.items.length) return acClose();
+    acRender(); AC.open = true; acBox.classList.remove('hidden');
+    var xy = caretXY(), wrapW = $('edWrap').clientWidth, wrapH = $('edWrap').clientHeight;
+    var w = Math.min(300, wrapW - 16), left = Math.max(4, Math.min(xy.x, wrapW - w - 18));
+    var top = xy.y + xy.h + 2; if (top + acBox.offsetHeight > wrapH && xy.y - acBox.offsetHeight > 0) top = xy.y - acBox.offsetHeight - 2;
+    acBox.style.width = w + 'px'; acBox.style.left = left + 'px'; acBox.style.top = top + 'px';
+  }
+  function acAccept() {
+    var it = AC.items[AC.sel]; if (!it) return acClose();
+    var pos = ed.selectionStart, line0 = ed.value.lastIndexOf('\n', AC.from - 1) + 1;
+    var indent = (/^[ \t]*/.exec(ed.value.slice(line0, AC.from)) || [''])[0];
+    var tpl = it.tpl.replace(/\n/g, '\n' + indent), k = tpl.indexOf('|'); tpl = tpl.replace('|', '');
+    // completa só o que falta: se o texto seguinte já fecha a chave, não duplica
+    var end = pos, close = false;
+    if (AC.kind !== 'cmd') {
+      var rest = /^[^},\s]*/.exec(ed.value.slice(pos))[0]; end = pos + rest.length;
+      close = !/^[},]/.test(ed.value.slice(end));          // \ref{ sem fechar: fecha a chave
+      if (close) tpl += '}';
+    }
+    ed.setRangeText(tpl, AC.from, end, 'end');
+    var caret = AC.from + (close ? tpl.length : (k >= 0 ? k : tpl.length)); ed.setSelectionRange(caret, caret);
+    acClose(); ed.dispatchEvent(new Event('input'));
+  }
+  ed.addEventListener('keydown', function (e) {
+    if (!AC.open) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopImmediatePropagation(); AC.sel = (AC.sel + (e.key === 'ArrowDown' ? 1 : AC.items.length - 1)) % AC.items.length; acRender(); }
+    else if ((e.key === 'Enter' && !e.ctrlKey && !e.metaKey) || e.key === 'Tab') { e.preventDefault(); e.stopImmediatePropagation(); acAccept(); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); acClose(); }
+    else if (e.key === 'Enter') acClose();
+  }, true);
+  ed.addEventListener('input', function (e) { if (e.isTrusted) acUpdate(); });
+  ed.addEventListener('blur', function () { setTimeout(acClose, 150); });
+  ed.addEventListener('scroll', function () { if (AC.open) acClose(); });
+  ed.addEventListener('click', acClose);
 
   function setEditor(text) {
     ed.value = text; syncHL();
@@ -245,6 +378,7 @@
       await ctx.sync();
       names.value.forEach(function (n) { var d = O.decLabel(n); if (d.kind) map[d.label] = d.kind; });
     } catch (e) { /* sem marcadores */ }
+    S.docLabels = map;
     return map;
   }
   // ---- numeração provisória: sem a API de campos (WordApi 1.5) o Word não renumera sozinho,
@@ -260,7 +394,7 @@
     var c = { Figura: 0, Tabela: 0, Quadro: 0, 'Equação': 0 };
     var ENV = { figure: 'Figura', table: 'Tabela', quadro: 'Quadro' };
     (tex || '').replace(/\\begin\{(figure|table|quadro)\}([\s\S]*?)\\end\{\1\}/g, function (m, e, body) { if (/\\caption\b/.test(body)) c[ENV[e]]++; return ''; });
-    c['Equação'] = (tex.match(/\\begin\{equation\}/g) || []).length;
+    c['Equação'] = (tex.match(/\\begin\{(equation|align|gather|multline|eqnarray|flalign)\}/g) || []).length;
     return c;
   }
   async function numbersBefore(ctx, point) {
@@ -618,7 +752,7 @@
   }
 
   // ------------------------------------------------------- ações
-  function primary() { return S.bound ? updateBound(false) : insertAtCursor(); }
+  function primary(ev) { if (S.bound && ev && ev.shiftKey) S.forceAll = true; return S.bound ? updateBound(false) : insertAtCursor(); }
 
   async function insertAtCursor(force) {
     if (needWord()) return;
@@ -741,7 +875,10 @@
       status(''); return null;
     }
     // blocos "stale" (formato antigo) nunca casam, para serem reescritos com o estilo atual
-    var pairs = lcsPairs(oldB.map(function (b, i) { return b.stale ? '\u0001' + i : norm(b.tex); }), newB.map(norm));
+    // Shift ao aplicar: reescreve todos os blocos (útil depois de uma atualização do painel)
+    var all = S.forceAll; S.forceAll = false;
+    var pairs = all ? [] : lcsPairs(oldB.map(function (b, i) { return b.stale ? '\u0001' + i : norm(b.tex); }), newB.map(norm));
+    if (all) { var lostF = oldB.filter(function (b) { return b.fixed; }); if (lostF.length) { notice('Este trecho tem sumário ou quebra de seção, que não podem ser reescritos. Selecione só o trecho com as equações e use Shift + Atualizar de novo.'); status(''); return null; } }
     var matched = {}; pairs.forEach(function (p) { matched[p[0]] = true; });
     var lostFixed = oldB.filter(function (b, i) { return b.fixed && !matched[i]; });
     if (lostFixed.length) {
@@ -822,6 +959,7 @@
         // o trecho mudou no Word desde a leitura? (você ou um colega editou)
         var cur = await readRange(ctx, b);
         if (!force && norm(cur.latex) !== norm(S.base)) {
+          S.forceAll = false;
           notice('Este trecho foi alterado no Word depois que foi lido no painel (por você ou por outra pessoa). Atualizar agora apagaria essas alterações.', [
             { label: 'Recarregar do Word', primary: true, run: function () { reloadBound(); } },
             { label: 'Sobrescrever', run: function () { notice(''); updateBound(true); } }
@@ -1146,6 +1284,7 @@
         loadProfile();
         loadLibrary();
         loadPreamble();
+        Word.run(function (ctx) { return labelKinds(ctx); }).catch(function () {});
         refreshOutline();
         // remove um vínculo esquecido de uma sessão anterior
         Word.run(async function (ctx) { ctx.document.deleteBookmark(BM); await ctx.sync(); }).catch(function () {});

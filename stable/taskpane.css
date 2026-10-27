@@ -126,3 +126,9 @@ button.small { padding: 3px 8px; font-size: 12px; }
 #preList .nativo, #preList .emulado { color: var(--ok); }
 #preList .layout { color: var(--suave); }
 #preList .nao { color: var(--erro); }
+#acBox { position: absolute; z-index: 5; list-style: none; margin: 0; padding: 2px 0; max-height: 220px; overflow: auto;
+  background: var(--fundo); border: 1px solid var(--borda); border-radius: 4px; box-shadow: 0 4px 14px rgba(0,0,0,.18); font-size: 12px; }
+#acBox li { display: flex; gap: 8px; align-items: baseline; padding: 3px 8px; cursor: pointer; white-space: nowrap; overflow: hidden; }
+#acBox li code { color: var(--cmd); flex: none; }
+#acBox li span { color: var(--suave); overflow: hidden; text-overflow: ellipsis; }
+#acBox li.sel { background: var(--campo); outline: 1px solid var(--azul2); outline-offset: -1px; }
