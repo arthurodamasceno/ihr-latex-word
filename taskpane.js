@@ -114,7 +114,7 @@
       e.preventDefault();
       ed.setRangeText('  ', ed.selectionStart, ed.selectionEnd, 'end');
     } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault(); primary();
+      e.preventDefault(); primary(e);
     }
   });
   // ---- realce: camada <pre> atrás do textarea transparente (comandos, comentários e $)
@@ -618,7 +618,7 @@
   }
 
   // ------------------------------------------------------- ações
-  function primary() { return S.bound ? updateBound(false) : insertAtCursor(); }
+  function primary(ev) { if (S.bound && ev && ev.shiftKey) S.forceAll = true; return S.bound ? updateBound(false) : insertAtCursor(); }
 
   async function insertAtCursor(force) {
     if (needWord()) return;
@@ -741,7 +741,10 @@
       status(''); return null;
     }
     // blocos "stale" (formato antigo) nunca casam, para serem reescritos com o estilo atual
-    var pairs = lcsPairs(oldB.map(function (b, i) { return b.stale ? '\u0001' + i : norm(b.tex); }), newB.map(norm));
+    // Shift ao aplicar: reescreve todos os blocos (útil depois de uma atualização do painel)
+    var all = S.forceAll; S.forceAll = false;
+    var pairs = all ? [] : lcsPairs(oldB.map(function (b, i) { return b.stale ? '\u0001' + i : norm(b.tex); }), newB.map(norm));
+    if (all) { var lostF = oldB.filter(function (b) { return b.fixed; }); if (lostF.length) { notice('Este trecho tem sumário ou quebra de seção, que não podem ser reescritos. Selecione só o trecho com as equações e use Shift + Atualizar de novo.'); status(''); return null; } }
     var matched = {}; pairs.forEach(function (p) { matched[p[0]] = true; });
     var lostFixed = oldB.filter(function (b, i) { return b.fixed && !matched[i]; });
     if (lostFixed.length) {
@@ -822,6 +825,7 @@
         // o trecho mudou no Word desde a leitura? (você ou um colega editou)
         var cur = await readRange(ctx, b);
         if (!force && norm(cur.latex) !== norm(S.base)) {
+          S.forceAll = false;
           notice('Este trecho foi alterado no Word depois que foi lido no painel (por você ou por outra pessoa). Atualizar agora apagaria essas alterações.', [
             { label: 'Recarregar do Word', primary: true, run: function () { reloadBound(); } },
             { label: 'Sobrescrever', run: function () { notice(''); updateBound(true); } }
