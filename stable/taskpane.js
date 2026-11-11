@@ -911,6 +911,9 @@
       if (miss.length) $('imgBox').open = true;
       status(''); return null;
     }
+    function newParaNear(i, where) {      // parágrafo vazio novo antes/depois do parágrafo i (ou da tabela dele)
+      return P[i].tableNestingLevel > 0 ? P[i].parentTableOrNullObject.insertParagraph('', where) : P[i].insertParagraph('', where);
+    }
     function edge(i, which) {      // parágrafo i (ou a tabela inteira que o contém)
       if (P[i].tableNestingLevel > 0) return P[i].parentTableOrNullObject.getRange('Whole');
       return P[i].getRange('Whole');
@@ -923,8 +926,11 @@
         var rg = edge(oldB[h.i0].p0).expandTo(edge(oldB[h.i1 - 1].p1));
         if (h.pkg) inserted[x] = rg.insertOoxml(h.pkg, 'Replace'); else rg.delete();
       } else if (h.pkg) {
-        if (h.i0 > 0) inserted[x] = edge(oldB[h.i0 - 1].p1).insertOoxml(h.pkg, 'After');
-        else if (oldB.length) inserted[x] = edge(oldB[0].p0).insertOoxml(h.pkg, 'Before');
+        // bloco novo: inserir direto "depois"/"antes" de um parágrafo fazia o último parágrafo
+        // inserido se fundir com o parágrafo vizinho (ex.: o texto novo grudava no título seguinte).
+        // Cria-se antes um parágrafo vazio próprio e o conteúdo entra no lugar dele.
+        if (h.i0 > 0) inserted[x] = newParaNear(oldB[h.i0 - 1].p1, 'After').insertOoxml(h.pkg, 'Replace');
+        else if (oldB.length) inserted[x] = newParaNear(oldB[0].p0, 'Before').insertOoxml(h.pkg, 'Replace');
         else inserted[x] = region.insertOoxml(h.pkg, 'Replace');
       }
     }
